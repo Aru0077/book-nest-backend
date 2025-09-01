@@ -24,11 +24,12 @@ async function bootstrap(): Promise<void> {
   // Compression middleware
   app.use(compression());
 
-  // Global validation pipe
+  // Global validation pipe - 包含安全配置
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
+      forbidUnknownValues: true, // 防止CVE-2019-18413安全漏洞
       transform: true,
       transformOptions: {
         enableImplicitConversion: true,

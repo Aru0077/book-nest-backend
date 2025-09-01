@@ -1,53 +1,57 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import type { NestMiddleware } from '@nestjs/common';
 import { LoggerMiddleware } from '@/common/middleware/logger.middleware';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { ResponseInterceptor } from '@/common/interceptors/response.interceptor';
 import { HealthModule } from '@/modules/health/health.module';
+import { configOptions } from '@/config';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+    // 全局配置模块
+    ConfigModule.forRoot(configOptions),
+    // 限流模块
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => [
+        {
+          ttl: configService.get<number>('app.throttle.ttl', 60000),
+          limit: configService.get<number>('app.throttle.limit', 100),
+        },
+      ],
+      inject: [ConfigService],
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 1 minute
-        limit: 100, // 100 requests per minute
-      },
-    ]),
+    // 健康检查模块
     HealthModule,
   ],
   controllers: [],
   providers: [
-    // Global exception filter
+    // 全局异常过滤器
     {
       provide: APP_FILTER,
-      useClass: HttpExceptionFilter as new () => HttpExceptionFilter,
+      useClass: HttpExceptionFilter,
     },
-    // Global response interceptor
+    // 全局响应拦截器
     {
       provide: APP_INTERCEPTOR,
-      useClass: ResponseInterceptor as new () => ResponseInterceptor<unknown>,
+      useClass: ResponseInterceptor,
     },
-    // Global auth guard (commented out until JWT is implemented)
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: AuthGuard,
-    // },
-    // Global throttler guard
+    // 全局限流守卫
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    // TODO: JWT认证守卫（待实现）
+    // {
+    //   provide: APP_GUARD,
+    //   useClass: AuthGuard,
+    // },
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(LoggerMiddleware as new () => NestMiddleware).forRoutes('*');
+    consumer.apply(LoggerMiddleware).forRoutes('*');
   }
 }

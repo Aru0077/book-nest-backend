@@ -1,4 +1,11 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '@/common/decorators/public.decorator';
@@ -6,13 +13,15 @@ import { Public } from '@/common/decorators/public.decorator';
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
+  constructor(private readonly configService: ConfigService) {}
+
   @Get()
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: 'Health check endpoint' })
+  @ApiOperation({ summary: '健康检查' })
   @ApiResponse({
     status: 200,
-    description: 'Service is healthy',
+    description: '服务运行正常',
     schema: {
       type: 'object',
       properties: {
@@ -20,6 +29,7 @@ export class HealthController {
         timestamp: { type: 'string', example: '2025-08-31T11:00:00.000Z' },
         uptime: { type: 'number', example: 123.456 },
         version: { type: 'string', example: '1.0.0' },
+        environment: { type: 'string', example: 'development' },
       },
     },
   })
@@ -28,20 +38,76 @@ export class HealthController {
     timestamp: string;
     uptime: number;
     version: string;
+    environment: string;
   } {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      version: process.env.npm_package_version || '1.0.0',
+      version: this.configService.get<string>('app.swagger.version') || '1.0.0',
+      environment: this.configService.get<string>('app.env') || 'development',
+    };
+  }
+
+  @Get('config')
+  @Public()
+  @ApiOperation({ summary: '配置信息 (仅开发环境)' })
+  @ApiResponse({ status: 200, description: '返回配置信息' })
+  @ApiResponse({ status: 403, description: '仅开发环境可用' })
+  getConfig(): {
+    app: {
+      name: string;
+      port: number;
+      env: string;
+      apiPrefix: string;
+    };
+    throttle: {
+      ttl: number;
+      limit: number;
+    };
+    redis: {
+      enabled: boolean;
+      host: string;
+      port: number;
+    };
+  } {
+    const env = this.configService.get<string>('app.env');
+    if (env !== 'development') {
+      throw new ForbiddenException('配置信息仅在开发环境可见');
+    }
+
+    return {
+      app: {
+        name: this.configService.get<string>('app.name') || 'BookNest API',
+        port: this.configService.get<number>('app.port') || 3000,
+        env: this.configService.get<string>('app.env') || 'development',
+        apiPrefix: this.configService.get<string>('app.apiPrefix') || 'api/v1',
+      },
+      throttle: {
+        ttl: this.configService.get<number>('app.throttle.ttl') || 60000,
+        limit: this.configService.get<number>('app.throttle.limit') || 100,
+      },
+      redis: {
+        enabled: this.configService.get<boolean>('app.redis.enabled') || false,
+        host: this.configService.get<string>('app.redis.host') || 'localhost',
+        port: this.configService.get<number>('app.redis.port') || 6379,
+      },
     };
   }
 
   @Get('error')
   @Public()
-  @ApiOperation({ summary: 'Test error handling' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiOperation({ summary: '异常测试接口' })
+  @ApiResponse({ status: 404, description: '测试404错误' })
   testError(): never {
-    throw new Error('This is a test error');
+    throw new NotFoundException('这是一个测试错误，用于验证异常处理系统');
+  }
+
+  @Get('validation-error')
+  @Public()
+  @ApiOperation({ summary: '验证错误测试接口' })
+  @ApiResponse({ status: 422, description: '测试验证错误' })
+  testValidationError(): never {
+    throw new UnprocessableEntityException('用户输入数据格式不正确');
   }
 }

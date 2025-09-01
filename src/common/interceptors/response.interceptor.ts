@@ -8,13 +8,24 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Response as ExpressResponse } from 'express';
 
+/**
+ * BookNest API标准响应格式接口
+ */
 export interface ApiResponse<T> {
-  data: T;
-  code: number;
-  message: string;
-  timestamp: string;
+  data: T; // 实际响应数据
+  code: number; // HTTP状态码
+  message: string; // 响应消息
+  timestamp: string; // ISO格式时间戳
 }
 
+/**
+ * BookNest 全局响应拦截器
+ *
+ * 统一包装所有成功响应的数据格式
+ * 自动添加状态码、消息和时间戳信息
+ *
+ * @template T - 响应数据类型
+ */
 @Injectable()
 export class ResponseInterceptor<T>
   implements NestInterceptor<T, ApiResponse<T>>
