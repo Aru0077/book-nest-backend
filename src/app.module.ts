@@ -6,12 +6,18 @@ import { LoggerMiddleware } from '@/common/middleware/logger.middleware';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { ResponseInterceptor } from '@/common/interceptors/response.interceptor';
 import { HealthModule } from '@/modules/health/health.module';
+import { PrismaModule } from '@/prisma';
+import { RedisModule } from '@/redis';
 import { configOptions } from '@/config';
 
 @Module({
   imports: [
     // 全局配置模块
     ConfigModule.forRoot(configOptions),
+    // 数据库模块
+    PrismaModule,
+    // Redis模块
+    RedisModule,
     // 限流模块
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],

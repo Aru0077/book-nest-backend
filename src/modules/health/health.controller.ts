@@ -9,16 +9,22 @@ import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '@/common/decorators/public.decorator';
+import { PrismaService } from '@/prisma/prisma.service';
+import { RedisService } from '@/redis/redis.service';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
+    private readonly redisService: RedisService,
+  ) {}
 
   @Get()
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: '健康检查' })
+  @ApiOperation({ summary: '基础健康检查' })
   @ApiResponse({
     status: 200,
     description: '服务运行正常',
@@ -46,6 +52,60 @@ export class HealthController {
       uptime: process.uptime(),
       version: this.configService.get<string>('app.swagger.version') || '1.0.0',
       environment: this.configService.get<string>('app.env') || 'development',
+    };
+  }
+
+  @Get('detailed')
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: '详细健康检查 (包含数据库和Redis)' })
+  @ApiResponse({
+    status: 200,
+    description: '返回详细健康状态',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'ok' },
+        timestamp: { type: 'string' },
+        uptime: { type: 'number' },
+        database: { type: 'boolean' },
+        redis: { type: 'boolean' },
+        services: {
+          type: 'object',
+          properties: {
+            database: { type: 'string', example: 'healthy' },
+            redis: { type: 'string', example: 'healthy' },
+          },
+        },
+      },
+    },
+  })
+  async detailedCheck(): Promise<{
+    status: string;
+    timestamp: string;
+    uptime: number;
+    database: boolean;
+    redis: boolean;
+    services: {
+      database: string;
+      redis: string;
+    };
+  }> {
+    const [dbHealthy, redisHealthy] = await Promise.all([
+      this.prismaService.healthCheck(),
+      this.redisService.healthCheck(),
+    ]);
+
+    return {
+      status: dbHealthy && redisHealthy ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: dbHealthy,
+      redis: redisHealthy,
+      services: {
+        database: dbHealthy ? 'healthy' : 'unhealthy',
+        redis: redisHealthy ? 'healthy' : 'unhealthy',
+      },
     };
   }
 
