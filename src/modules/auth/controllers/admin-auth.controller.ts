@@ -30,6 +30,10 @@ import { LoginDto } from '../dto/login.dto';
 import { LoginResponseDto } from '../dto/auth-response.dto';
 import { AdminRegisterDto } from '../dto/admin-register.dto';
 import { AdminApprovalDto, AdminInfoDto } from '../dto/admin-approval.dto';
+import {
+  RefreshTokenDto,
+  RefreshTokenResponseDto,
+} from '../dto/refresh-token.dto';
 import { AuthUser } from '../auth.types';
 
 @ApiTags('Admin Auth')
@@ -256,5 +260,64 @@ export class AdminAuthController {
       currentUser.id,
       rejectedReason,
     );
+  }
+
+  @Post('refresh')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '刷新访问令牌',
+    description: '使用刷新令牌获取新的访问令牌和刷新令牌',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '刷新成功',
+    type: RefreshTokenResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: '刷新令牌无效或已过期',
+    schema: {
+      example: {
+        success: false,
+        code: 401,
+        message: '刷新令牌已失效',
+        timestamp: '2025-09-03T06:50:00.000Z',
+        path: '/api/v1/admin/auth/refresh',
+        method: 'POST',
+      },
+    },
+  })
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+  ): Promise<RefreshTokenResponseDto> {
+    return this.authService.refreshAccessToken(refreshTokenDto.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '管理员注销',
+    description: '注销当前管理员，清除刷新令牌和缓存',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '注销成功',
+    schema: {
+      example: {
+        success: true,
+        data: {
+          message: '注销成功',
+        },
+        code: 200,
+        message: 'Request successful',
+        timestamp: '2025-09-03T06:50:00.000Z',
+      },
+    },
+  })
+  async logout(
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<{ message: string }> {
+    await this.authService.logout(currentUser.id, currentUser.role);
+    return { message: '注销成功' };
   }
 }

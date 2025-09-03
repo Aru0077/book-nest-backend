@@ -32,6 +32,11 @@ export interface JwtPayload {
   exp?: number;
 }
 
+// 刷新令牌载荷
+export interface RefreshTokenPayload extends JwtPayload {
+  type: 'refresh';
+}
+
 // 登录凭证
 export interface LoginDto {
   identifier: string; // 邮箱/手机号/用户名
@@ -59,6 +64,7 @@ export interface AuthUser {
 export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
+  refreshToken: string;
 }
 
 // Request扩展
@@ -101,4 +107,26 @@ export interface PendingAdminItem {
   phone?: string;
   username?: string;
   appliedAt: Date;
+}
+
+// 刷新令牌DTO
+export interface RefreshTokenDto {
+  refreshToken: string;
+}
+
+// 刷新令牌响应
+export interface RefreshTokenResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+// 缓存用户数据类型
+export interface CachedUser {
+  id: string;
+  role: UserRole;
+  email: string | null;
+  phone: string | null;
+  username: string | null;
+  status: string;
+  adminRole?: AdminRole; // 仅管理员有此字段
 }

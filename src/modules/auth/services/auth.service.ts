@@ -5,27 +5,37 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '@/prisma';
+import { RedisService } from '@/redis';
 import {
   AdminInfo,
   AdminRole,
   AdminStatus,
+  CachedUser,
+  JwtPayload,
   LoginDto,
   LoginResponse,
+  RefreshTokenResponse,
   RegisterDto,
   UserRole,
 } from '../auth.types';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
+    private redis: RedisService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   // 管理员登录
@@ -39,8 +49,15 @@ export class AuthService {
 
     await this.validatePassword(loginDto.password, user.password);
 
-    const payload = { sub: user.id, role: UserRole.ADMIN, email: user.email };
-    const accessToken = this.jwtService.sign(payload);
+    // 生成访问令牌和刷新令牌
+    const tokens = await this.generateTokens(
+      user.id,
+      UserRole.ADMIN,
+      user.email || undefined,
+    );
+
+    // 清除旧的用户缓存
+    await this.clearUserCache(user.id, UserRole.ADMIN);
 
     return {
       user: {
@@ -48,7 +65,7 @@ export class AuthService {
         role: UserRole.ADMIN,
         email: user.email || undefined,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -57,12 +74,15 @@ export class AuthService {
     const user = await this.findMerchantUser(loginDto.identifier);
     await this.validatePassword(loginDto.password, user.password);
 
-    const payload = {
-      sub: user.id,
-      role: UserRole.MERCHANT,
-      email: user.email,
-    };
-    const accessToken = this.jwtService.sign(payload);
+    // 生成访问令牌和刷新令牌
+    const tokens = await this.generateTokens(
+      user.id,
+      UserRole.MERCHANT,
+      user.email || undefined,
+    );
+
+    // 清除旧的用户缓存
+    await this.clearUserCache(user.id, UserRole.MERCHANT);
 
     return {
       user: {
@@ -70,7 +90,7 @@ export class AuthService {
         role: UserRole.MERCHANT,
         email: user.email || undefined,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -79,12 +99,15 @@ export class AuthService {
     const user = await this.findCustomerUser(loginDto.identifier);
     await this.validatePassword(loginDto.password, user.password!);
 
-    const payload = {
-      sub: user.id,
-      role: UserRole.CUSTOMER,
-      email: user.email,
-    };
-    const accessToken = this.jwtService.sign(payload);
+    // 生成访问令牌和刷新令牌
+    const tokens = await this.generateTokens(
+      user.id,
+      UserRole.CUSTOMER,
+      user.email || undefined,
+    );
+
+    // 清除旧的用户缓存
+    await this.clearUserCache(user.id, UserRole.CUSTOMER);
 
     return {
       user: {
@@ -92,7 +115,7 @@ export class AuthService {
         role: UserRole.CUSTOMER,
         email: user.email || undefined,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -133,12 +156,12 @@ export class AuthService {
       },
     });
 
-    const payload = {
-      sub: user.id,
-      role: UserRole.MERCHANT,
-      email: user.email,
-    };
-    const accessToken = this.jwtService.sign(payload);
+    // 生成访问令牌和刷新令牌
+    const tokens = await this.generateTokens(
+      user.id,
+      UserRole.MERCHANT,
+      user.email || undefined,
+    );
 
     return {
       user: {
@@ -146,7 +169,7 @@ export class AuthService {
         role: UserRole.MERCHANT,
         email: user.email || undefined,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -173,12 +196,12 @@ export class AuthService {
       },
     });
 
-    const payload = {
-      sub: user.id,
-      role: UserRole.CUSTOMER,
-      email: user.email,
-    };
-    const accessToken = this.jwtService.sign(payload);
+    // 生成访问令牌和刷新令牌
+    const tokens = await this.generateTokens(
+      user.id,
+      UserRole.CUSTOMER,
+      user.email || undefined,
+    );
 
     return {
       user: {
@@ -186,7 +209,7 @@ export class AuthService {
         role: UserRole.CUSTOMER,
         email: user.email || undefined,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -384,5 +407,211 @@ export class AuthService {
   ): Promise<void> {
     const isValid = await bcrypt.compare(plainPassword, hashedPassword);
     if (!isValid) throw new UnauthorizedException('密码错误');
+  }
+
+  // ========================================
+  // JWT令牌和缓存相关方法
+  // ========================================
+
+  /**
+   * 生成访问令牌和刷新令牌
+   */
+  private async generateTokens(
+    userId: string,
+    role: UserRole,
+    email?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const payload: JwtPayload = {
+      sub: userId,
+      role,
+      email,
+    };
+
+    // 生成访问令牌
+    const accessToken = this.jwtService.sign(payload);
+
+    // 生成刷新令牌（有效期更长）
+    const refreshPayload = { ...payload, type: 'refresh' };
+    const refreshToken = this.jwtService.sign(refreshPayload, {
+      expiresIn: this.configService.get<string>(
+        'JWT_REFRESH_EXPIRES_IN',
+        '30d',
+      ),
+    });
+
+    // 将刷新令牌存储到Redis
+    const refreshTokenKey = `refresh_token:${userId}`;
+    await this.redis.set(refreshTokenKey, refreshToken, 30 * 24 * 60 * 60); // 30天
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * 刷新访问令牌
+   */
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<RefreshTokenResponse> {
+    try {
+      // 验证刷新令牌
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const payload = this.jwtService.verify(refreshToken);
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (payload.type !== 'refresh') {
+        throw new UnauthorizedException('无效的刷新令牌');
+      }
+
+      // 检查Redis中的刷新令牌是否存在
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const storedToken = await this.redis.get(`refresh_token:${payload.sub}`);
+      if (!storedToken || storedToken !== refreshToken) {
+        throw new UnauthorizedException('刷新令牌已失效');
+      }
+
+      // 检查用户是否仍然有效
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+      const user = await this.getUserFromCache(payload.sub, payload.role);
+      if (!user) {
+        throw new UnauthorizedException('用户不存在或已被禁用');
+      }
+
+      // 生成新的令牌对
+      const tokens = await this.generateTokens(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+        payload.sub,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+        payload.role,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+        payload.email,
+      );
+
+      return tokens;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('刷新令牌验证失败');
+    }
+  }
+
+  /**
+   * 从缓存获取用户信息，如果不存在则从数据库查询并缓存
+   */
+  async getUserFromCache(
+    userId: string,
+    role: UserRole,
+  ): Promise<CachedUser | null> {
+    const cacheKey = `user:${role}:${userId}`;
+
+    // 先尝试从缓存获取
+    let user = await this.redis.getObject<CachedUser>(cacheKey);
+
+    if (!user) {
+      // 缓存中不存在，从数据库查询
+      const dbUser = await this.getUserByRole(userId, role);
+      if (!dbUser) {
+        return null;
+      }
+
+      // 构建缓存用户对象
+      user = {
+        id: dbUser.id,
+        role,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        username: dbUser.username,
+        status: dbUser.status,
+        adminRole: dbUser.adminRole as AdminRole,
+      };
+
+      // 存入缓存，TTL为15分钟
+      await this.redis.setObject(cacheKey, user, 15 * 60);
+      this.logger.debug(`用户信息已缓存: ${cacheKey}`);
+    }
+
+    return user;
+  }
+
+  /**
+   * 清除用户缓存
+   */
+  async clearUserCache(userId: string, role: UserRole): Promise<void> {
+    const cacheKey = `user:${role}:${userId}`;
+    await this.redis.del(cacheKey);
+    this.logger.debug(`已清除用户缓存: ${cacheKey}`);
+  }
+
+  /**
+   * 注销用户（清除刷新令牌和缓存）
+   */
+  async logout(userId: string, role: UserRole): Promise<void> {
+    // 清除刷新令牌
+    await this.redis.del(`refresh_token:${userId}`);
+    // 清除用户缓存
+    await this.clearUserCache(userId, role);
+    this.logger.log(`用户已注销: ${userId}`);
+  }
+
+  /**
+   * 根据角色获取用户信息（包含adminRole）
+   */
+  private async getUserByRole(
+    userId: string,
+    role: UserRole,
+  ): Promise<{
+    id: string;
+    email: string | null;
+    phone: string | null;
+    username: string | null;
+    status: string;
+    adminRole?: string;
+  } | null> {
+    switch (role) {
+      case UserRole.ADMIN: {
+        const admin = await this.prisma.adminUser.findUnique({
+          where: { id: userId, status: 'ACTIVE' },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            username: true,
+            status: true,
+            role: true,
+          },
+        });
+        if (admin) {
+          return {
+            ...admin,
+            adminRole: admin.role,
+          };
+        }
+        return admin;
+      }
+      case UserRole.MERCHANT:
+        return this.prisma.merchantUser.findUnique({
+          where: { id: userId, status: 'ACTIVE' },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            username: true,
+            status: true,
+          },
+        });
+      case UserRole.CUSTOMER:
+        return this.prisma.customerUser.findUnique({
+          where: { id: userId, status: 'ACTIVE' },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            username: true,
+            status: true,
+          },
+        });
+      default:
+        return null;
+    }
   }
 }

@@ -15,14 +15,14 @@ import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { ROLES_KEY } from '@/common/decorators/roles.decorator';
 import { ADMIN_ROLES_KEY } from '@/common/decorators/admin-roles.decorator';
 import { AdminRole, AuthUser, JwtPayload, UserRole } from '../auth.types';
-import { PrismaService } from '@/prisma';
+import { AuthService } from '../services/auth.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService,
     private reflector: Reflector,
-    private prisma: PrismaService,
+    private authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -55,10 +55,13 @@ export class AuthGuard implements CanActivate {
       // 验证JWT
       const payload: JwtPayload = this.jwtService.verify(token);
 
-      // 获取用户信息并验证状态
-      const user = await this.getUserByRole(payload.sub, payload.role);
+      // 使用缓存获取用户信息
+      const user = await this.authService.getUserFromCache(
+        payload.sub,
+        payload.role,
+      );
       if (!user) {
-        throw new UnauthorizedException('用户不存在');
+        throw new UnauthorizedException('用户不存在或已被禁用');
       }
 
       // 检查角色权限
@@ -78,16 +81,8 @@ export class AuthGuard implements CanActivate {
       );
 
       if (requiredAdminRoles && payload.role === UserRole.ADMIN) {
-        // 获取管理员的详细角色信息
-        const adminUser = await this.prisma.adminUser.findUnique({
-          where: { id: payload.sub },
-          select: { role: true },
-        });
-
-        if (
-          !adminUser ||
-          !requiredAdminRoles.includes(adminUser.role as AdminRole)
-        ) {
+        // 检查管理员角色权限（从缓存的用户信息中获取）
+        if (!user.adminRole || !requiredAdminRoles.includes(user.adminRole)) {
           throw new UnauthorizedException('管理员权限不足');
         }
       } else if (requiredAdminRoles) {
@@ -124,33 +119,6 @@ export class AuthGuard implements CanActivate {
 
       // 其他未知错误
       throw new UnauthorizedException('认证验证失败');
-    }
-  }
-
-  private async getUserByRole(
-    userId: string,
-    role: UserRole,
-  ): Promise<{
-    id: string;
-    email: string | null;
-    phone: string | null;
-    username: string | null;
-  } | null> {
-    switch (role) {
-      case UserRole.ADMIN:
-        return this.prisma.adminUser.findUnique({
-          where: { id: userId, status: 'ACTIVE' },
-        });
-      case UserRole.MERCHANT:
-        return this.prisma.merchantUser.findUnique({
-          where: { id: userId, status: 'ACTIVE' },
-        });
-      case UserRole.CUSTOMER:
-        return this.prisma.customerUser.findUnique({
-          where: { id: userId, status: 'ACTIVE' },
-        });
-      default:
-        return null;
     }
   }
 }

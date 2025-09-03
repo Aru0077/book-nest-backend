@@ -95,6 +95,54 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.exists(key);
   }
 
+  /**
+   * 设置JSON对象
+   */
+  async setObject<T>(key: string, value: T, ttl?: number): Promise<void> {
+    if (!this.isEnabled || !this.client) {
+      return;
+    }
+    const jsonValue = JSON.stringify(value);
+    if (ttl) {
+      await this.client.setEx(key, ttl, jsonValue);
+    } else {
+      await this.client.set(key, jsonValue);
+    }
+  }
+
+  /**
+   * 获取JSON对象
+   */
+  async getObject<T>(key: string): Promise<T | null> {
+    if (!this.isEnabled || !this.client) {
+      return null;
+    }
+    const value = await this.client.get(key);
+    if (!value) {
+      return null;
+    }
+    try {
+      return JSON.parse(value) as T;
+    } catch (error) {
+      this.logger.error(`Failed to parse JSON for key ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 删除多个key（支持模式匹配）
+   */
+  async deletePattern(pattern: string): Promise<number> {
+    if (!this.isEnabled || !this.client) {
+      return 0;
+    }
+    const keys = await this.client.keys(pattern);
+    if (keys.length === 0) {
+      return 0;
+    }
+    return this.client.del(keys);
+  }
+
   async healthCheck(): Promise<boolean> {
     if (!this.isEnabled) {
       return true;
