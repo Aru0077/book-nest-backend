@@ -6,6 +6,8 @@ import { LoggerMiddleware } from '@/common/middleware/logger.middleware';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { ResponseInterceptor } from '@/common/interceptors/response.interceptor';
 import { HealthModule } from '@/modules/health/health.module';
+import { AuthModule } from '@/modules/auth/auth.module';
+import { AuthGuard } from '@/modules/auth/guards/auth.guard';
 import { PrismaModule } from '@/prisma';
 import { RedisModule } from '@/redis';
 import { configOptions } from '@/config';
@@ -29,6 +31,8 @@ import { configOptions } from '@/config';
       ],
       inject: [ConfigService],
     }),
+    // 认证模块
+    AuthModule,
     // 健康检查模块
     HealthModule,
   ],
@@ -49,11 +53,11 @@ import { configOptions } from '@/config';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    // TODO: JWT认证守卫（待实现）
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: AuthGuard,
-    // },
+    // 全局JWT认证守卫
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {

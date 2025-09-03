@@ -24,6 +24,18 @@ enum UserStatus {
   PENDING_VERIFICATION // 待验证状态
 }
 
+enum AdminRole {
+  SUPER_ADMIN         // 超级管理员
+  ADMIN              // 普通管理员
+}
+
+enum AdminStatus {
+  PENDING            // 待审批
+  ACTIVE             // 已启用
+  INACTIVE           // 已禁用
+  REJECTED           // 已拒绝
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -42,12 +54,19 @@ model AdminUser {
   username String? @unique
   password String
   
+  // 管理员权限和状态
+  role     AdminRole   @default(ADMIN)         // 管理员角色
+  status   AdminStatus @default(PENDING)       // 审批状态
+  
   // 验证状态
   emailVerified Boolean @default(false)
   phoneVerified Boolean @default(false)
   
-  // 用户状态
-  status UserStatus @default(ACTIVE)
+  // 审批相关
+  appliedAt      DateTime  @default(now())     // 申请时间
+  approvedBy     String?                       // 审批人ID
+  approvedAt     DateTime?                     // 审批时间
+  rejectedReason String?                       // 拒绝原因
   
   // 时间戳
   createdAt   DateTime @default(now())

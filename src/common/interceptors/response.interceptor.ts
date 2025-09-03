@@ -9,9 +9,10 @@ import { map } from 'rxjs/operators';
 import { Response as ExpressResponse } from 'express';
 
 /**
- * BookNest API标准响应格式接口
+ * BookNest API标准响应格式接口 - 符合REST API最佳实践
  */
 export interface ApiResponse<T> {
+  success: true; // 成功标识
   data: T; // 实际响应数据
   code: number; // HTTP状态码
   message: string; // 响应消息
@@ -38,6 +39,7 @@ export class ResponseInterceptor<T>
 
     return next.handle().pipe(
       map((data: T) => ({
+        success: true,
         data,
         code: response.statusCode,
         message: 'Request successful',

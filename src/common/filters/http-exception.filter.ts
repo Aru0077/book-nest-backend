@@ -9,18 +9,20 @@ import {
 import { Request, Response } from 'express';
 
 /**
- * BookNest 全局异常过滤器
+ * BookNest 全局异常过滤器 - 符合REST API最佳实践
  *
  * 统一处理所有异常并返回标准格式的错误响应
- * 使用标准HTTP状态码，避免复杂的业务错误码
+ * 参考RFC 7807标准和REST API最佳实践
  *
  * 错误响应格式:
  * {
+ *   success: false,      // 失败标识
  *   code: number,        // HTTP状态码
- *   timestamp: string,   // 时间戳
+ *   timestamp: string,   // ISO时间戳
  *   path: string,       // 请求路径
  *   method: string,     // HTTP方法
- *   message: string,    // 错误消息
+ *   message: string,    // 用户友好的错误消息
+ *   error?: any,        // 详细错误信息(开发环境)
  * }
  */
 @Catch()
@@ -36,11 +38,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const message = this.getErrorMessage(exception);
 
     const errorResponse = {
+      success: false,
       code: status,
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
       message,
+      ...(process.env.NODE_ENV === 'development' && {
+        error:
+          exception instanceof Error
+            ? { name: exception.name, stack: exception.stack }
+            : exception,
+      }),
     };
 
     // 记录错误日志
