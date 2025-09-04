@@ -20,13 +20,29 @@ import { configOptions } from '@/config';
     PrismaModule,
     // Redis模块
     RedisModule,
-    // 限流模块
+    // 分级限流模块配置
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => [
+      useFactory: (_configService: ConfigService) => [
         {
-          ttl: configService.get<number>('app.throttle.ttl', 60000),
-          limit: configService.get<number>('app.throttle.limit', 100),
+          name: 'short',
+          ttl: 1000, // 1秒
+          limit: 3, // 1秒内最多3次请求（防止快速点击）
+        },
+        {
+          name: 'medium',
+          ttl: 10000, // 10秒
+          limit: 20, // 10秒内最多20次请求（正常使用）
+        },
+        {
+          name: 'long',
+          ttl: 60000, // 1分钟
+          limit: 100, // 1分钟内最多100次请求（整体限制）
+        },
+        {
+          name: 'auth',
+          ttl: 300000, // 5分钟
+          limit: 10, // 5分钟内最多10次认证尝试（防暴力破解）
         },
       ],
       inject: [ConfigService],

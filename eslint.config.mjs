@@ -51,8 +51,12 @@ export default tseslint.config(
   {
     files: ['**/*.ts'],
     rules: {
-      // TypeScript 规则 - 社区推荐的平衡配置
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // TypeScript 规则 - 严格的类型安全配置
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { 
         argsIgnorePattern: '^_',
@@ -100,7 +104,9 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off'
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off'
     }
   }
 );

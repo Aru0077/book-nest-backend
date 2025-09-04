@@ -8,6 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from '@/prisma';
 import { RedisModule } from '@/redis';
 import { AuthService } from './services/auth.service';
+import { PasswordHistoryService } from './services/password-history.service';
 import { AuthGuard } from './guards/auth.guard';
 import { AdminAuthController } from './controllers/admin-auth.controller';
 import { MerchantAuthController } from './controllers/merchant-auth.controller';
@@ -34,7 +35,7 @@ import { CustomerAuthController } from './controllers/customer-auth.controller';
     MerchantAuthController,
     CustomerAuthController,
   ],
-  providers: [AuthService, AuthGuard],
-  exports: [AuthService, AuthGuard, JwtModule], // 导出JwtModule
+  providers: [AuthService, PasswordHistoryService, AuthGuard],
+  exports: [AuthService, PasswordHistoryService, AuthGuard, JwtModule], // 导出JwtModule
 })
 export class AuthModule {}

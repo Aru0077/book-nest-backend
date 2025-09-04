@@ -25,6 +25,11 @@ import {
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { SuperAdminOnly } from '@/common/decorators/admin-roles.decorator';
+import {
+  AuthThrottle,
+  RegisterThrottle,
+  SensitiveOperationThrottle,
+} from '@/common/decorators/throttle.decorator';
 import { AuthService } from '../services/auth.service';
 import { LoginDto } from '../dto/login.dto';
 import { LoginResponseDto } from '../dto/auth-response.dto';
@@ -43,6 +48,7 @@ export class AdminAuthController {
 
   @Post('login')
   @Public()
+  @AuthThrottle() // 应用认证限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '管理员登录',
@@ -85,6 +91,7 @@ export class AdminAuthController {
 
   @Post('register')
   @Public()
+  @RegisterThrottle() // 应用注册限流
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: '管理员自助注册',
@@ -167,6 +174,7 @@ export class AdminAuthController {
   }
 
   @Post('approve/:adminId')
+  @SensitiveOperationThrottle() // 应用敏感操作限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '审批通过管理员申请',
@@ -222,6 +230,7 @@ export class AdminAuthController {
   }
 
   @Put('reject/:adminId')
+  @SensitiveOperationThrottle() // 应用敏感操作限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '拒绝管理员申请',

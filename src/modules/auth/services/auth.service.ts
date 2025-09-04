@@ -9,6 +9,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { BusinessError } from '@/common/exceptions';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -22,6 +23,7 @@ import {
   JwtPayload,
   LoginDto,
   LoginResponse,
+  RefreshTokenPayload,
   RefreshTokenResponse,
   RegisterDto,
   UserRole,
@@ -50,8 +52,14 @@ export class AuthService {
     const user = await this.findAdminUser(loginDto.identifier);
 
     // 检查管理员账户状态，只有ACTIVE状态的管理员才能登录
+    if (user.status === 'PENDING') {
+      throw BusinessError.accountDisabled('管理员账户待审批');
+    }
+    if (user.status === 'REJECTED') {
+      throw BusinessError.accountDisabled('管理员账户申请已被拒绝');
+    }
     if (user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('管理员账户未激活或已被禁用');
+      throw BusinessError.accountDisabled('管理员账户已被禁用');
     }
 
     // 验证密码是否正确
@@ -153,7 +161,7 @@ export class AuthService {
   async merchantRegister(registerDto: RegisterDto): Promise<LoginResponse> {
     // 验证至少提供一种联系方式(邮箱/手机号/用户名)
     if (!registerDto.email && !registerDto.phone && !registerDto.username) {
-      throw new BadRequestException('至少提供一个联系方式');
+      throw BusinessError.missingContactInfo();
     }
 
     // 检查是否已存在
@@ -161,21 +169,21 @@ export class AuthService {
       const exists = await this.prisma.merchantUser.findUnique({
         where: { email: registerDto.email },
       });
-      if (exists) throw new BadRequestException('邮箱已被注册');
+      if (exists) throw BusinessError.emailAlreadyExists();
     }
 
     if (registerDto.phone) {
       const exists = await this.prisma.merchantUser.findUnique({
         where: { phone: registerDto.phone },
       });
-      if (exists) throw new BadRequestException('手机号已被注册');
+      if (exists) throw BusinessError.phoneAlreadyExists();
     }
 
     if (registerDto.username) {
       const exists = await this.prisma.merchantUser.findUnique({
         where: { username: registerDto.username },
       });
-      if (exists) throw new BadRequestException('用户名已被注册');
+      if (exists) throw BusinessError.usernameAlreadyExists();
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 12);
@@ -214,7 +222,7 @@ export class AuthService {
   async customerRegister(registerDto: RegisterDto): Promise<LoginResponse> {
     // 验证至少提供一种联系方式(邮箱/手机号/用户名)
     if (!registerDto.email && !registerDto.phone && !registerDto.username) {
-      throw new BadRequestException('至少提供一个联系方式');
+      throw BusinessError.missingContactInfo();
     }
 
     // 检查是否已存在
@@ -266,7 +274,7 @@ export class AuthService {
         ],
       },
     });
-    if (!user) throw new UnauthorizedException('用户不存在');
+    if (!user) throw BusinessError.userNotFound();
     return user;
   }
 
@@ -283,7 +291,7 @@ export class AuthService {
         status: 'ACTIVE',
       },
     });
-    if (!user) throw new UnauthorizedException('用户不存在或未激活');
+    if (!user) throw BusinessError.userNotFound('用户不存在或未激活');
     return user;
   }
 
@@ -300,7 +308,7 @@ export class AuthService {
         status: 'ACTIVE',
       },
     });
-    if (!user) throw new UnauthorizedException('用户不存在或未激活');
+    if (!user) throw BusinessError.userNotFound('用户不存在或未激活');
     return user;
   }
 
@@ -314,7 +322,7 @@ export class AuthService {
   async adminRegister(registerDto: RegisterDto): Promise<{ message: string }> {
     // 验证至少提供一种联系方式(邮箱/手机号/用户名)
     if (!registerDto.email && !registerDto.phone && !registerDto.username) {
-      throw new BadRequestException('至少提供一个联系方式');
+      throw BusinessError.missingContactInfo();
     }
 
     // 检查是否已存在
@@ -479,7 +487,7 @@ export class AuthService {
     hashedPassword: string,
   ): Promise<void> {
     const isValid = await bcrypt.compare(plainPassword, hashedPassword);
-    if (!isValid) throw new UnauthorizedException('密码错误');
+    if (!isValid) throw BusinessError.invalidCredentials();
   }
 
   // ========================================
@@ -537,24 +545,20 @@ export class AuthService {
   ): Promise<RefreshTokenResponse> {
     try {
       // 验证刷新令牌的签名和过期时间
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const payload = this.jwtService.verify(refreshToken);
 
       // 检查令牌类型是否为刷新令牌
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (payload.type !== 'refresh') {
         throw new UnauthorizedException('无效的刷新令牌');
       }
 
       // 从 Redis 中检查刷新令牌是否存在且匹配(防止令牌重放攻击)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       const storedToken = await this.redis.get(`refresh_token:${payload.sub}`);
       if (!storedToken || storedToken !== refreshToken) {
         throw new UnauthorizedException('刷新令牌已失效');
       }
 
       // 从redis缓存中检查用户是否仍然有效且处于激活状态
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
       const user = await this.getUserFromCache(payload.sub, payload.role);
       if (!user) {
         throw new UnauthorizedException('用户不存在或已被禁用');
@@ -562,11 +566,8 @@ export class AuthService {
 
       // 生成新的令牌对(访问令牌 + 新的刷新令牌)
       const tokens = await this.generateTokens(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
         payload.sub,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
         payload.role,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
         payload.email,
       );
 
