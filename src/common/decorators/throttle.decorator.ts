@@ -46,34 +46,6 @@ export function RegisterThrottle(): DecoratorFunction {
 }
 
 /**
- * 敏感操作限流（如密码重置、账户修改）
- */
-export function SensitiveOperationThrottle(): DecoratorFunction {
-  return applyDecorators(
-    SkipThrottle(), // 跳过全局限流
-    Throttle({
-      short: { limit: 1, ttl: 2000 }, // 2秒内最多1次
-      medium: { limit: 3, ttl: 60000 }, // 1分钟内最多3次
-      long: { limit: 10, ttl: 3600000 }, // 1小时内最多10次
-    }),
-  );
-}
-
-/**
- * 查询接口限流（正常使用频率）
- */
-export function QueryThrottle(): DecoratorFunction {
-  return applyDecorators(
-    SkipThrottle(), // 跳过全局限流
-    Throttle({
-      short: { limit: 5, ttl: 1000 }, // 1秒内最多5次
-      medium: { limit: 30, ttl: 10000 }, // 10秒内最多30次
-      long: { limit: 200, ttl: 60000 }, // 1分钟内最多200次
-    }),
-  );
-}
-
-/**
  * 自定义限流配置
  * @param config 限流配置对象
  */
