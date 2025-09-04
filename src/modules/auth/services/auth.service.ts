@@ -23,10 +23,10 @@ import {
   JwtPayload,
   LoginDto,
   LoginResponse,
-  RefreshTokenPayload,
   RefreshTokenResponse,
   RegisterDto,
   UserRole,
+  RefreshTokenPayload as _RefreshTokenPayload,
 } from '../auth.types';
 
 @Injectable()
@@ -545,7 +545,9 @@ export class AuthService {
   ): Promise<RefreshTokenResponse> {
     try {
       // 验证刷新令牌的签名和过期时间
-      const payload = this.jwtService.verify(refreshToken);
+      const payload = this.jwtService.verify(
+        refreshToken,
+      ) as _RefreshTokenPayload;
 
       // 检查令牌类型是否为刷新令牌
       if (payload.type !== 'refresh') {

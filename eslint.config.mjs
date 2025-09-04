@@ -58,6 +58,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'error',
       '@typescript-eslint/no-unsafe-call': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off', // 允许类型断言，用于解决JWT类型问题
       '@typescript-eslint/no-unused-vars': ['error', { 
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
@@ -66,7 +67,7 @@ export default tseslint.config(
       }],
       
       // 函数返回类型 - 对NestJS友好的配置
-      '@typescript-eslint/explicit-function-return-type': ['warn', {
+      '@typescript-eslint/explicit-function-return-type': ['error', {
         allowExpressions: true,
         allowTypedFunctionExpressions: true,
         allowHigherOrderFunctions: true,
@@ -82,10 +83,10 @@ export default tseslint.config(
       'prefer-const': 'error',
       'no-var': 'error',
       'object-shorthand': 'error',
-      'prefer-template': 'warn',
+      'prefer-template': 'error',
       
       // Import 组织 - 简化版本
-      'sort-imports': ['warn', {
+      'sort-imports': ['error', {
         ignoreDeclarationSort: true,
       }],
 
