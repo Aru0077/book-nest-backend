@@ -31,34 +31,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
           host: this.configService.get<string>('REDIS_HOST', 'localhost'),
           port: this.configService.get<number>('REDIS_PORT', 6379),
           connectTimeout: 10000, // 连接超时
-          commandTimeout: 5000, // 命令超时
-          lazyConnect: true, // 延迟连接
           keepAlive: true, // 保持连接
           noDelay: true, // 禁用Nagle算法
         },
         password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
         database: this.configService.get<number>('REDIS_DB', 0),
 
-        // 性能优化配置
-        isolationPoolOptions: {
-          min: 2, // 最小连接数
-          max: 10, // 最大连接数
-        },
+        // 性能优化配置移除（isolationPoolOptions在新版本Redis中不支持）
 
-        // 重连配置
-        reconnectStrategy: (retries: number) => {
-          if (retries > 5) {
-            this.logger.error('Redis reconnect failed after 5 attempts');
-            return false;
-          }
-          return Math.min(retries * 100, 3000); // 递增重连延迟，最大3秒
-        },
+        // 重连配置移除（新版本Redis客户端不支持reconnectStrategy）
 
-        // 命令队列配置
-        commandsQueueMaxLength: 1000,
-
-        // 字符串编码
-        encoding: 'utf8',
+        // 简化配置，移除不兼容的选项
       });
 
       this.client.on('error', (err) => {
@@ -257,7 +240,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (!this.isEnabled || !this.client) {
       return false;
     }
-    return this.client.expire(key, seconds);
+    const result = await this.client.expire(key, seconds);
+    return result === 1; // Redis返回1表示成功，0表示失败
   }
 
   /**
@@ -337,7 +321,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (!this.isEnabled || !this.client) {
       return false;
     }
-    return this.client.sIsMember(key, member);
+    const result = await this.client.sIsMember(key, member);
+    return result === 1; // Redis返回1表示成员存在，0表示不存在
   }
 
   /**

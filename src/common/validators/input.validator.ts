@@ -124,10 +124,11 @@ export function IsSortField(
   allowedFields: string[],
   _validationOptions?: ValidationOptions,
 ): PropertyDecorator {
-  return function (object: object, propertyName: string): void {
+  return function (object: object, propertyName: string | symbol): void {
+    const propName = propertyName.toString();
     registerDecorator({
       target: object.constructor,
-      propertyName,
+      propertyName: propName,
       options: _validationOptions,
       constraints: [allowedFields],
       validator: {
@@ -202,10 +203,11 @@ export class IsNoSqlInjectionConstraint
 export function IsNoSqlInjection(
   validationOptions?: ValidationOptions,
 ): PropertyDecorator {
-  return function (object: object, propertyName: string): void {
+  return function (object: object, propertyName: string | symbol): void {
+    const propName = propertyName.toString();
     registerDecorator({
       target: object.constructor,
-      propertyName,
+      propertyName: propName,
       options: validationOptions,
       constraints: [],
       validator: IsNoSqlInjectionConstraint,

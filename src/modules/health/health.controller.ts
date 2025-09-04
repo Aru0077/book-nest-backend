@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '@/common/decorators/public.decorator';
-import { HealthCheckThrottle } from '@/common/decorators/throttle.decorator';
+import { QueryThrottle } from '@/common/decorators/throttle.decorator';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
 
@@ -23,7 +23,7 @@ export class HealthController {
 
   @Get()
   @Public()
-  @HealthCheckThrottle() // 应用健康检查限流
+  @QueryThrottle() // 应用查询限流
   @ApiOperation({ summary: '基础健康检查' })
   @ApiResponse({
     status: 200,
@@ -57,7 +57,7 @@ export class HealthController {
 
   @Get('detailed')
   @Public()
-  @HealthCheckThrottle() // 应用健康检查限流
+  @QueryThrottle() // 应用查询限流
   @ApiOperation({ summary: '详细健康检查 (包含数据库和Redis)' })
   @ApiResponse({
     status: 200,
