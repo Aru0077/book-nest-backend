@@ -14,8 +14,9 @@ export class BusinessException extends HttpException {
   public readonly errorCode: ErrorCode;
 
   constructor(errorCode: ErrorCode, message?: string, httpStatus?: HttpStatus) {
-    const errorMessage = message || getErrorMessage(errorCode);
-    const status = httpStatus || BusinessException.getHttpStatus(errorCode);
+    const errorMessage: string = message ?? getErrorMessage(errorCode);
+    const status: HttpStatus =
+      httpStatus ?? BusinessException.getHttpStatus(errorCode);
 
     super(
       {
@@ -68,7 +69,7 @@ export class BusinessException extends HttpException {
       if (errorCode === ErrorCode.RESOURCE_ACCESS_DENIED) {
         return HttpStatus.FORBIDDEN;
       }
-      if (errorCode === ErrorCode.RESOURCE_CONFLICT) {
+      if (errorCode === ErrorCode.RESOURCE_ALREADY_EXISTS) {
         return HttpStatus.CONFLICT;
       }
       return HttpStatus.BAD_REQUEST;
@@ -135,7 +136,7 @@ export class BusinessError {
   }
 
   static usernameAlreadyExists(message?: string): BusinessException {
-    return new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, message);
+    return new BusinessException(ErrorCode.USER_ALREADY_EXISTS, message);
   }
 
   static weakPassword(message?: string): BusinessException {
@@ -143,7 +144,7 @@ export class BusinessError {
   }
 
   static missingContactInfo(message?: string): BusinessException {
-    return new BusinessException(ErrorCode.MISSING_CONTACT_INFO, message);
+    return new BusinessException(ErrorCode.MISSING_REQUIRED_FIELD, message);
   }
 
   // 管理员相关
@@ -171,7 +172,7 @@ export class BusinessError {
   }
 
   static inputTooLarge(message?: string): BusinessException {
-    return new BusinessException(ErrorCode.INPUT_TOO_LARGE, message);
+    return new BusinessException(ErrorCode.INVALID_INPUT_FORMAT, message);
   }
 
   // 资源相关
@@ -189,6 +190,6 @@ export class BusinessError {
   }
 
   static redisError(message?: string): BusinessException {
-    return new BusinessException(ErrorCode.REDIS_ERROR, message);
+    return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, message);
   }
 }

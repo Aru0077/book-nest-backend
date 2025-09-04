@@ -17,19 +17,19 @@ import {
 
 /**
  * 安全的字符串验证（防XSS）
+ * @param minLength 最小长度，默认1
+ * @param maxLength 最大长度，默认255
+ * @param allowRichText 是否允许富文本字符（标点符号等），默认false
  */
 export function IsSafeString(
   minLength = 1,
   maxLength = 255,
+  allowRichText = false,
 ): PropertyDecorator {
-  return applyDecorators(
+  const validations = [
     IsString({ message: '必须是字符串' }),
     MinLength(minLength, { message: `最少${minLength}个字符` }),
     MaxLength(maxLength, { message: `最多${maxLength}个字符` }),
-    // 禁止潜在的XSS字符
-    Matches(/^[^<>&"']*$/, {
-      message: '包含非法字符，不允许使用 < > & " \' 字符',
-    }),
     // 内置NoSQL注入防护
     Matches(
       /^(?!.*\$where)(?!.*\$ne)(?!.*\$gt)(?!.*\$lt)(?!.*javascript:)(?!.*eval\s*\().*$/i,
@@ -37,28 +37,33 @@ export function IsSafeString(
         message: '输入包含潜在的安全风险',
       },
     ),
-  );
+  ];
+
+  if (allowRichText) {
+    // 允许富文本，但禁止危险的脚本标签
+    validations.push(
+      Matches(/^(?!.*<script)(?!.*javascript:)(?!.*onclick)(?!.*onerror).*$/i, {
+        message: '内容包含潜在的安全风险',
+      }),
+    );
+  } else {
+    // 严格模式，禁止XSS字符
+    validations.push(
+      Matches(/^[^<>&"']*$/, {
+        message: '包含非法字符，不允许使用 < > & " \' 字符',
+      }),
+    );
+  }
+
+  return applyDecorators(...validations);
 }
 
 /**
- * 文本内容验证（允许更多字符，但仍然安全）
+ * 文本内容验证 - 已废弃，请使用 IsSafeString(minLength, maxLength, true)
+ * @deprecated 使用 IsSafeString(1, maxLength, true) 替代
  */
 export function IsSafeText(maxLength = 5000): PropertyDecorator {
-  return applyDecorators(
-    IsString({ message: '必须是字符串' }),
-    MaxLength(maxLength, { message: `内容长度不能超过${maxLength}个字符` }),
-    // 允许基本的文本字符，但禁止危险的脚本标签
-    Matches(/^(?!.*<script)(?!.*javascript:)(?!.*onclick)(?!.*onerror).*$/i, {
-      message: '内容包含潜在的安全风险',
-    }),
-    // 内置NoSQL注入防护
-    Matches(
-      /^(?!.*\$where)(?!.*\$ne)(?!.*\$gt)(?!.*\$lt)(?!.*javascript:)(?!.*eval\s*\().*$/i,
-      {
-        message: '内容包含潜在的安全风险',
-      },
-    ),
-  );
+  return IsSafeString(1, maxLength, true);
 }
 
 /**

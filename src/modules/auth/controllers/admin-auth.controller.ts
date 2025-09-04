@@ -27,8 +27,8 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { SuperAdminOnly } from '@/common/decorators/admin-roles.decorator';
 import {
   AuthThrottle,
+  CustomThrottle,
   RegisterThrottle,
-  SensitiveOperationThrottle,
 } from '@/common/decorators/throttle.decorator';
 import { AuthService } from '../services/auth.service';
 import { LoginDto } from '../dto/login.dto';
@@ -174,7 +174,10 @@ export class AdminAuthController {
   }
 
   @Post('approve/:adminId')
-  @SensitiveOperationThrottle() // 应用敏感操作限流
+  @CustomThrottle({
+    short: { limit: 2, ttl: 5000 },
+    medium: { limit: 5, ttl: 60000 },
+  }) // 审批限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '审批通过管理员申请',
@@ -230,7 +233,10 @@ export class AdminAuthController {
   }
 
   @Put('reject/:adminId')
-  @SensitiveOperationThrottle() // 应用敏感操作限流
+  @CustomThrottle({
+    short: { limit: 2, ttl: 5000 },
+    medium: { limit: 5, ttl: 60000 },
+  }) // 拒绝限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '拒绝管理员申请',
