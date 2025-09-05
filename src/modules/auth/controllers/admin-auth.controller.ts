@@ -46,6 +46,7 @@ import { AuthUser } from '../auth.types';
 export class AdminAuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // 管理员登录
   @Post('login')
   @Public()
   @AuthThrottle() // 应用认证限流
@@ -89,6 +90,7 @@ export class AdminAuthController {
     return this.authService.adminLogin(loginDto);
   }
 
+  // 管理员自助注册
   @Post('register')
   @Public()
   @RegisterThrottle() // 应用注册限流
@@ -144,6 +146,7 @@ export class AdminAuthController {
     return this.authService.adminRegister(registerDto);
   }
 
+  // 获取待审批的管理员列表
   @Get('pending')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -173,6 +176,7 @@ export class AdminAuthController {
     return this.authService.getPendingAdmins();
   }
 
+  // 审批通过管理员申请
   @Post('approve/:adminId')
   @CustomThrottle({
     short: { limit: 2, ttl: 5000 },
@@ -232,6 +236,7 @@ export class AdminAuthController {
     return this.authService.approveAdmin(adminId, currentUser.id);
   }
 
+  // 拒绝管理员申请
   @Put('reject/:adminId')
   @CustomThrottle({
     short: { limit: 2, ttl: 5000 },
@@ -277,6 +282,7 @@ export class AdminAuthController {
     );
   }
 
+  // 刷新访问令牌
   @Post('refresh')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -308,6 +314,7 @@ export class AdminAuthController {
     return this.authService.refreshAccessToken(refreshTokenDto.refreshToken);
   }
 
+  // 管理员注销
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
