@@ -59,14 +59,6 @@ export function IsSafeString(
 }
 
 /**
- * 文本内容验证 - 已废弃，请使用 IsSafeString(minLength, maxLength, true)
- * @deprecated 使用 IsSafeString(1, maxLength, true) 替代
- */
-export function IsSafeText(maxLength = 5000): PropertyDecorator {
-  return IsSafeString(1, maxLength, true);
-}
-
-/**
  * ID验证（通常是数据库ID或UUID格式）
  */
 export function IsValidId(

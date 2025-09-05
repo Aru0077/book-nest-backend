@@ -36,12 +36,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         },
         password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
         database: this.configService.get<number>('REDIS_DB', 0),
-
-        // 性能优化配置移除（isolationPoolOptions在新版本Redis中不支持）
-
-        // 重连配置移除（新版本Redis客户端不支持reconnectStrategy）
-
-        // 简化配置，移除不兼容的选项
       });
 
       this.client.on('error', (err) => {
