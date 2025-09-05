@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import * as express from 'express';
 import { AppModule } from './app.module';
+import { AppConfig } from '@/config/configuration';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -56,7 +57,10 @@ async function bootstrap(): Promise<void> {
 
   // CORS configuration
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGIN', 'http://localhost:3000'),
+    origin: configService.get<string>(
+      'app.corsOrigin',
+      'http://localhost:3000',
+    ),
     credentials: true,
   });
 
@@ -88,18 +92,23 @@ async function bootstrap(): Promise<void> {
   );
 
   // Swagger documentation
+  const swaggerConfig = configService.get<AppConfig['swagger']>('app.swagger')!;
   const config = new DocumentBuilder()
-    .setTitle('Book Nest API')
-    .setDescription('The Book Nest API documentation')
-    .setVersion('1.0')
-    .addTag('books')
+    .setTitle(swaggerConfig.title)
+    .setDescription(swaggerConfig.description)
+    .setVersion(swaggerConfig.version)
+    .addTag('auth', '认证相关接口')
+    .addTag('admin', '管理员接口')
+    .addTag('merchant', '商家接口')
+    .addTag('customer', '客户接口')
+    .addTag('health', '健康检查')
     .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('app.port', 3000);
   await app.listen(port);
 
   logger.log(`Application is running on: http://localhost:${port}`);

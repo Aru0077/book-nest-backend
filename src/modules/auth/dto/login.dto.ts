@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsStrongPassword } from '@/common/validators';
 
 export class LoginDto {
   @ApiProperty({
@@ -12,14 +13,13 @@ export class LoginDto {
   identifier: string;
 
   @ApiProperty({
-    description: '密码',
+    description: '密码（8-128字符，必须包含大小写字母、数字和特殊字符）',
     example: 'password123',
-    minLength: 6,
-    maxLength: 50,
+    minLength: 8,
+    maxLength: 128,
   })
   @IsString()
   @IsNotEmpty({ message: '密码不能为空' })
-  @MinLength(6, { message: '密码长度至少6个字符' })
-  @MaxLength(50, { message: '密码长度不能超过50个字符' })
+  @IsStrongPassword()
   password: string;
 }

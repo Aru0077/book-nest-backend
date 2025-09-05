@@ -6,15 +6,21 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisClientType, createClient } from 'redis';
+import { AppConfig } from '@/config/configuration';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private client: RedisClientType;
   private readonly isEnabled: boolean;
+  private readonly defaultTtl: number;
 
   constructor(private readonly configService: ConfigService) {
-    this.isEnabled = this.configService.get<boolean>('REDIS_ENABLED', false);
+    this.isEnabled = this.configService.get<boolean>(
+      'app.redis.enabled',
+      false,
+    );
+    this.defaultTtl = this.configService.get<number>('app.redis.ttl', 300);
   }
 
   async onModuleInit(): Promise<void> {
@@ -26,16 +32,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Initializing Redis connection...');
 
     try {
+      const redisConfig =
+        this.configService.get<AppConfig['redis']>('app.redis')!;
       this.client = createClient({
         socket: {
-          host: this.configService.get<string>('REDIS_HOST', 'localhost'),
-          port: this.configService.get<number>('REDIS_PORT', 6379),
+          host: redisConfig.host,
+          port: redisConfig.port,
           connectTimeout: 10000, // 连接超时
           keepAlive: true, // 保持连接
           noDelay: true, // 禁用Nagle算法
         },
-        password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
-        database: this.configService.get<number>('REDIS_DB', 0),
+        password: redisConfig.password || undefined,
+        database: redisConfig.db,
       });
 
       this.client.on('error', (err) => {
@@ -77,11 +85,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (!this.isEnabled || !this.client) {
       return;
     }
-    if (ttl) {
-      await this.client.setEx(key, ttl, value);
-    } else {
-      await this.client.set(key, value);
-    }
+    const expireTime = ttl ?? this.defaultTtl;
+    await this.client.setEx(key, expireTime, value);
   }
 
   async del(key: string): Promise<number> {
@@ -106,11 +111,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const jsonValue = JSON.stringify(value);
-    if (ttl) {
-      await this.client.setEx(key, ttl, jsonValue);
-    } else {
-      await this.client.set(key, jsonValue);
-    }
+    const expireTime = ttl ?? this.defaultTtl;
+    await this.client.setEx(key, expireTime, jsonValue);
   }
 
   /**

@@ -11,6 +11,7 @@ import { AuthGuard } from '@/modules/auth/guards/auth.guard';
 import { PrismaModule } from '@/prisma';
 import { RedisModule } from '@/redis';
 import { configOptions } from '@/config';
+import { AppConfig } from '@/config/configuration';
 
 @Module({
   imports: [
@@ -23,28 +24,32 @@ import { configOptions } from '@/config';
     // 分级限流模块配置
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (_configService: ConfigService) => [
-        {
-          name: 'short',
-          ttl: 1000, // 1秒
-          limit: 3, // 1秒内最多3次请求（防止快速点击）
-        },
-        {
-          name: 'medium',
-          ttl: 10000, // 10秒
-          limit: 20, // 10秒内最多20次请求（正常使用）
-        },
-        {
-          name: 'long',
-          ttl: 60000, // 1分钟
-          limit: 100, // 1分钟内最多100次请求（整体限制）
-        },
-        {
-          name: 'auth',
-          ttl: 300000, // 5分钟
-          limit: 10, // 5分钟内最多10次认证尝试（防暴力破解）
-        },
-      ],
+      useFactory: (configService: ConfigService) => {
+        const throttleConfig =
+          configService.get<AppConfig['throttle']>('app.throttle')!;
+        return [
+          {
+            name: 'short',
+            ttl: 1000, // 1秒
+            limit: 3, // 1秒内最多3次请求（防止快速点击）
+          },
+          {
+            name: 'medium',
+            ttl: 10000, // 10秒
+            limit: 20, // 10秒内最多20次请求（正常使用）
+          },
+          {
+            name: 'long',
+            ttl: throttleConfig.ttl, // 从配置文件读取
+            limit: throttleConfig.limit, // 从配置文件读取
+          },
+          {
+            name: 'auth',
+            ttl: 300000, // 5分钟
+            limit: 10, // 5分钟内最多10次认证尝试（防暴力破解）
+          },
+        ];
+      },
       inject: [ConfigService],
     }),
     // 认证模块

@@ -1,6 +1,49 @@
 import { registerAs } from '@nestjs/config';
 
 /**
+ * 应用程序配置类型定义
+ */
+export interface AppConfig {
+  name: string;
+  env: string;
+  port: number;
+  apiPrefix: string;
+  corsOrigin: string;
+  database: {
+    url: string;
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+    database: string;
+    schema: string;
+  };
+  jwt: {
+    secret: string;
+    expiresIn: string;
+    refreshSecret: string;
+    refreshExpiresIn: string;
+  };
+  redis: {
+    enabled: boolean;
+    host: string;
+    port: number;
+    password: string;
+    db: number;
+    ttl: number;
+  };
+  throttle: {
+    ttl: number;
+    limit: number;
+  };
+  swagger: {
+    title: string;
+    description: string;
+    version: string;
+  };
+}
+
+/**
  * 应用程序配置
  * 统一管理所有环境变量配置
  */
