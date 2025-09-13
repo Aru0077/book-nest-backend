@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 枚举类型定义
+// ========================================
+
+enum UserStatus {
+  ACTIVE              // 激活状态
+  INACTIVE            // 未激活状态
+  SUSPENDED           // 暂停状态
+  PENDING_VERIFICATION // 待验证状态
+}
+
+enum AdminRole {
+  SUPER_ADMIN         // 超级管理员
+  ADMIN              // 普通管理员
+}
+
+enum AdminStatus {
+  PENDING            // 待审批
+  ACTIVE             // 已启用
+  INACTIVE           // 已禁用
+  REJECTED           // 已拒绝
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ========================================
+// 三个独立的用户表
+// ========================================
+
+// 管理员用户表
+model AdminUser {
+  id       String @id @default(cuid())
+  email    String? @unique
+  phone    String? @unique
+  username String? @unique
+  password String
+  
+  // 管理员权限和状态
+  role     AdminRole   @default(ADMIN)         // 管理员角色
+  status   AdminStatus @default(PENDING)       // 审批状态
+  
+  // 验证状态
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+  
+  // 审批相关
+  appliedAt      DateTime  @default(now())     // 申请时间
+  approvedBy     String?                       // 审批人ID
+  approvedAt     DateTime?                     // 审批时间
+  rejectedReason String?                       // 拒绝原因
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  @@map("admin_users")
+}
+
+// 商家用户表
+model MerchantUser {
+  id       String @id @default(cuid())
+  email    String? @unique
+  phone    String? @unique
+  username String? @unique
+  password String
+  
+  // 验证状态
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+  
+  // 用户状态
+  status UserStatus @default(ACTIVE)
+  
+  // 安全密码 (6位数字，用于敏感操作)
+  securityPassword String?
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  @@map("merchant_users")
+}
+
+// 客户用户表
+model CustomerUser {
+  id       String @id @default(cuid())
+  email    String? @unique
+  phone    String? @unique
+  username String? @unique
+  password String? // 第三方登录时可为空
+  
+  // 第三方登录字段 (预留)
+  facebookId String? @unique
+  googleId   String? @unique
+  
+  // 验证状态
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+  
+  // 用户状态
+  status UserStatus @default(ACTIVE)
+  
+  // 时间戳
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  @@map("customer_users")
+}
