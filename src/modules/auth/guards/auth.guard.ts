@@ -113,7 +113,6 @@ export class AuthGuard implements CanActivate {
         role: payload.role,
         email: user.email || undefined,
         phone: user.phone || undefined,
-        username: user.username || undefined,
       };
 
       return true; // 认证成功，允许访问

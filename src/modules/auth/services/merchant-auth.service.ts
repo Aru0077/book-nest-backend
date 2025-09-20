@@ -16,7 +16,7 @@ import { BusinessError } from '@/common/exceptions';
 import { BaseAuthService } from './base-auth.service';
 import { SmsService } from '../../sms/sms.service';
 import { EmailService } from '../../email/email.service';
-import { LoginDto, LoginResponse, RegisterDto, UserRole } from '../auth.types';
+import { LoginDto, LoginResponse, UserRole } from '../auth.types';
 
 @Injectable()
 export class MerchantAuthService extends BaseAuthService {
@@ -57,184 +57,63 @@ export class MerchantAuthService extends BaseAuthService {
   }
 
   /**
-   * 商家注册
+   * 发送验证码（统一接口）
    */
-  async register(registerDto: RegisterDto): Promise<LoginResponse> {
-    if (!registerDto.email && !registerDto.phone && !registerDto.username) {
-      throw BusinessError.missingContactInfo();
+  async sendCode(contact: string): Promise<{ message: string }> {
+    const isEmail = contact.includes('@');
+
+    if (isEmail) {
+      // 发送邮箱验证码
+      await this.emailService.sendVerificationCode(contact);
+    } else {
+      // 发送手机验证码
+      await this.smsService.sendVerificationCode(contact);
     }
-
-    await this.checkMerchantExists(registerDto);
-
-    const hashedPassword = await bcrypt.hash(registerDto.password, 12);
-
-    const user = await this.prisma.merchantUser.create({
-      data: {
-        ...registerDto,
-        password: hashedPassword,
-      },
-    });
-
-    const tokens = await this.generateTokens(
-      user.id,
-      UserRole.MERCHANT,
-      user.email || undefined,
-    );
-
-    return {
-      user: {
-        id: user.id,
-        role: UserRole.MERCHANT,
-        email: user.email || undefined,
-      },
-      ...tokens,
-    };
-  }
-
-  /**
-   * 发送注册用短信验证码
-   */
-  async sendRegistrationSmsCode(
-    phone: string,
-  ): Promise<{ message: string; phone: string }> {
-    // 先检查手机号是否已被注册
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { phone },
-    });
-    if (existingUser) {
-      throw BusinessError.phoneAlreadyExists();
-    }
-
-    // 调用SMS服务发送验证码
-    await this.smsService.sendVerificationCode(phone);
-
-    // 脱敏显示手机号
-    const maskedPhone = phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
-
-    return {
-      message: '验证码已发送',
-      phone: maskedPhone,
-    };
-  }
-
-  /**
-   * 发送注册用邮箱验证码
-   */
-  async sendRegistrationEmailCode(email: string): Promise<{ message: string }> {
-    // 先检查邮箱是否已被注册
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { email },
-    });
-    if (existingUser) {
-      throw BusinessError.emailAlreadyExists();
-    }
-
-    // 调用Email服务发送验证码
-    await this.emailService.sendVerificationCode(email);
 
     return { message: '验证码已发送' };
   }
 
   /**
-   * 商家手机验证码注册
+   * 验证码登录/注册（统一接口）
    */
-  async registerByPhoneCode(
-    phone: string,
-    code: string,
-  ): Promise<LoginResponse> {
-    // 验证短信验证码
-    await this.smsService.verifyCode(phone, code);
+  async verifyLogin(contact: string, code: string): Promise<LoginResponse> {
+    const isEmail = contact.includes('@');
 
-    // 检查手机号是否已被注册
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { phone },
-    });
-    if (existingUser) {
-      throw BusinessError.phoneAlreadyExists();
+    // 验证验证码
+    if (isEmail) {
+      await this.emailService.verifyEmailCode(contact, code);
+    } else {
+      await this.smsService.verifyCode(contact, code);
     }
 
-    // 创建新的商家用户
-    const user = await this.prisma.merchantUser.create({
-      data: {
-        phone,
-        phoneVerified: true,
-        password: '', // 验证码注册时密码为空
-        status: 'ACTIVE',
-      },
+    // 查找是否已存在用户
+    const whereClause = isEmail ? { email: contact } : { phone: contact };
+    let user = await this.prisma.merchantUser.findUnique({
+      where: whereClause,
     });
 
-    // 生成访问令牌和刷新令牌
-    const tokens = await this.generateTokens(user.id, UserRole.MERCHANT);
-
-    return {
-      user: {
-        id: user.id,
-        role: UserRole.MERCHANT,
-        email: user.email || undefined,
-      },
-      ...tokens,
-    };
-  }
-
-  /**
-   * 商家邮箱验证码注册
-   */
-  async registerByEmailCode(
-    email: string,
-    code: string,
-  ): Promise<LoginResponse> {
-    // 验证邮箱验证码
-    await this.emailService.verifyEmailCode(email, code);
-
-    // 检查邮箱是否已被注册
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { email },
-    });
-    if (existingUser) {
-      throw BusinessError.emailAlreadyExists();
-    }
-
-    // 创建新的商家用户
-    const user = await this.prisma.merchantUser.create({
-      data: {
-        email,
-        emailVerified: true,
-        password: '', // 验证码注册时密码为空
-        status: 'ACTIVE',
-      },
-    });
-
-    // 生成访问令牌和刷新令牌
-    const tokens = await this.generateTokens(user.id, UserRole.MERCHANT);
-
-    return {
-      user: {
-        id: user.id,
-        role: UserRole.MERCHANT,
-        email: user.email || undefined,
-      },
-      ...tokens,
-    };
-  }
-
-  /**
-   * 商家手机验证码登录
-   */
-  async loginByPhoneCode(phone: string, code: string): Promise<LoginResponse> {
-    // 验证短信验证码
-    await this.smsService.verifyCode(phone, code);
-
-    // 查找商家用户
-    const user = await this.prisma.merchantUser.findFirst({
-      where: {
-        phone,
-        status: 'ACTIVE',
-        phoneVerified: true,
-      },
-    });
-
+    // 如果用户不存在，则创建新用户（自动注册）
     if (!user) {
-      throw BusinessError.userNotFound('手机号未注册或未验证');
+      const userData = isEmail
+        ? { email: contact, emailVerified: true, password: '' }
+        : { phone: contact, phoneVerified: true, password: '' };
+
+      user = await this.prisma.merchantUser.create({
+        data: {
+          ...userData,
+          status: 'ACTIVE',
+        },
+      });
+    } else {
+      // 更新验证状态
+      const updateData = isEmail
+        ? { emailVerified: true }
+        : { phoneVerified: true };
+
+      user = await this.prisma.merchantUser.update({
+        where: { id: user.id },
+        data: updateData,
+      });
     }
 
     // 生成JWT双令牌
@@ -254,218 +133,115 @@ export class MerchantAuthService extends BaseAuthService {
   }
 
   /**
-   * 商家邮箱验证码登录
+   * 绑定联系方式（统一接口）
    */
-  async loginByEmailCode(email: string, code: string): Promise<LoginResponse> {
-    // 验证邮箱验证码
-    await this.emailService.verifyEmailCode(email, code);
-
-    // 查找商家用户
-    const user = await this.prisma.merchantUser.findFirst({
-      where: {
-        email,
-        status: 'ACTIVE',
-        emailVerified: true,
-      },
-    });
-
-    if (!user) {
-      throw BusinessError.userNotFound('邮箱未注册或未验证');
-    }
-
-    // 生成JWT双令牌
-    const tokens = await this.generateTokens(user.id, UserRole.MERCHANT);
-
-    // 清除Redis中的旧用户缓存
-    await this.clearUserCache(user.id, UserRole.MERCHANT);
-
-    return {
-      user: {
-        id: user.id,
-        role: UserRole.MERCHANT,
-        email: user.email || undefined,
-      },
-      ...tokens,
-    };
-  }
-
-  /**
-   * 绑定手机号到商家账户
-   */
-  async bindPhone(
+  async bindContact(
     userId: string,
-    phone: string,
+    contact: string,
     code: string,
   ): Promise<{ message: string }> {
-    // 验证短信验证码
-    await this.smsService.verifyCode(phone, code);
+    const isEmail = contact.includes('@');
 
-    // 检查手机号是否已被其他用户使用
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { phone },
-    });
-    if (existingUser && existingUser.id !== userId) {
-      throw BusinessError.phoneAlreadyExists();
+    // 验证验证码
+    if (isEmail) {
+      await this.emailService.verifyEmailCode(contact, code);
+    } else {
+      await this.smsService.verifyCode(contact, code);
     }
 
-    // 更新用户手机号
-    await this.prisma.merchantUser.update({
-      where: { id: userId },
-      data: {
-        phone,
-        phoneVerified: true,
-      },
-    });
-
-    // 清除用户缓存
-    await this.clearUserCache(userId, UserRole.MERCHANT);
-
-    return { message: '手机号绑定成功' };
-  }
-
-  /**
-   * 绑定邮箱到商家账户
-   */
-  async bindEmail(
-    userId: string,
-    email: string,
-    code: string,
-  ): Promise<{ message: string }> {
-    // 验证邮箱验证码
-    await this.emailService.verifyEmailCode(email, code);
-
-    // 检查邮箱是否已被其他用户使用
+    // 检查联系方式是否已被其他用户使用
+    const whereClause = isEmail ? { email: contact } : { phone: contact };
     const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { email },
+      where: whereClause,
     });
     if (existingUser && existingUser.id !== userId) {
-      throw BusinessError.emailAlreadyExists();
+      throw isEmail
+        ? BusinessError.emailAlreadyExists()
+        : BusinessError.phoneAlreadyExists();
     }
 
-    // 更新用户邮箱
+    // 更新用户联系方式
+    const updateData = isEmail
+      ? { email: contact, emailVerified: true }
+      : { phone: contact, phoneVerified: true };
+
     await this.prisma.merchantUser.update({
       where: { id: userId },
-      data: {
-        email,
-        emailVerified: true,
-      },
+      data: updateData,
     });
 
     // 清除用户缓存
     await this.clearUserCache(userId, UserRole.MERCHANT);
 
-    return { message: '邮箱绑定成功' };
+    return { message: '联系方式绑定成功' };
   }
 
   /**
-   * 设置商家账号密码(用户名+密码)
+   * 设置/修改登录密码
    */
-  async setAccount(
+  async setPassword(
     userId: string,
-    username: string,
-    password: string,
+    newPassword: string,
+    oldPassword?: string,
   ): Promise<{ message: string }> {
-    // 检查用户名是否已被使用
-    const existingUser = await this.prisma.merchantUser.findUnique({
-      where: { username },
-    });
-    if (existingUser && existingUser.id !== userId) {
-      throw BusinessError.usernameAlreadyExists();
-    }
-
-    // 加密密码
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // 更新用户名和密码
-    await this.prisma.merchantUser.update({
-      where: { id: userId },
-      data: {
-        username,
-        password: hashedPassword,
-      },
-    });
-
-    // 清除用户缓存
-    await this.clearUserCache(userId, UserRole.MERCHANT);
-
-    return { message: '账号密码设置成功' };
-  }
-
-  /**
-   * 设置商家安全密码
-   */
-  async setSecurityPassword(
-    userId: string,
-    securityPassword: string,
-  ): Promise<{ message: string }> {
-    // 加密安全密码
-    const hashedSecurityPassword = await bcrypt.hash(securityPassword, 12);
-
-    // 更新安全密码
-    await this.prisma.merchantUser.update({
-      where: { id: userId },
-      data: {
-        securityPassword: hashedSecurityPassword,
-      },
-    });
-
-    // 清除用户缓存
-    await this.clearUserCache(userId, UserRole.MERCHANT);
-
-    return { message: '安全密码设置成功' };
-  }
-
-  /**
-   * 验证商家安全密码
-   */
-  async verifySecurityPassword(
-    userId: string,
-    securityPassword: string,
-  ): Promise<{ message: string }> {
-    // 获取用户信息
+    // 获取用户当前信息
     const user = await this.prisma.merchantUser.findUnique({
       where: { id: userId },
-      select: { securityPassword: true },
+      select: { password: true },
     });
 
-    if (!user || !user.securityPassword) {
-      throw new BadRequestException('请先设置安全密码');
+    if (!user) {
+      throw BusinessError.userNotFound();
     }
 
-    // 验证安全密码
-    const isValid = await bcrypt.compare(
-      securityPassword,
-      user.securityPassword,
-    );
-    if (!isValid) {
-      throw new BadRequestException('安全密码错误');
+    // 如果用户已有密码，需要验证原密码
+    if (user.password && user.password.length > 0) {
+      if (!oldPassword) {
+        throw new BadRequestException('修改密码需要提供原密码');
+      }
+      const isOldPasswordValid = await bcrypt.compare(
+        oldPassword,
+        user.password,
+      );
+      if (!isOldPasswordValid) {
+        throw new BadRequestException('原密码错误');
+      }
     }
 
-    return { message: '验证成功' };
+    // 加密新密码
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // 更新密码
+    await this.prisma.merchantUser.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    // 清除用户缓存
+    await this.clearUserCache(userId, UserRole.MERCHANT);
+
+    return { message: '密码设置成功' };
   }
 
   /**
    * 获取商家认证状态信息
    */
   async getAuthProfile(userId: string): Promise<{
-    hasAccount: boolean;
+    hasPassword: boolean;
     hasPhone: boolean;
     phoneVerified: boolean;
     hasEmail: boolean;
     emailVerified: boolean;
-    hasSecurityPassword: boolean;
   }> {
     // 获取用户信息
     const user = await this.prisma.merchantUser.findUnique({
       where: { id: userId },
       select: {
-        username: true,
         password: true,
         phone: true,
         phoneVerified: true,
         email: true,
         emailVerified: true,
-        securityPassword: true,
       },
     });
 
@@ -474,16 +250,11 @@ export class MerchantAuthService extends BaseAuthService {
     }
 
     return {
-      hasAccount: !!(
-        user.username &&
-        user.password &&
-        user.password.length > 0
-      ),
+      hasPassword: !!(user.password && user.password.length > 0),
       hasPhone: !!user.phone,
       phoneVerified: user.phoneVerified,
       hasEmail: !!user.email,
       emailVerified: user.emailVerified,
-      hasSecurityPassword: !!user.securityPassword,
     };
   }
 
@@ -495,41 +266,11 @@ export class MerchantAuthService extends BaseAuthService {
   ): Promise<{ id: string; password: string; email: string | null }> {
     const user = await this.prisma.merchantUser.findFirst({
       where: {
-        OR: [
-          { email: identifier },
-          { phone: identifier },
-          { username: identifier },
-        ],
+        OR: [{ email: identifier }, { phone: identifier }],
         status: 'ACTIVE',
       },
     });
     if (!user) throw BusinessError.userNotFound('用户不存在或未激活');
     return user;
-  }
-
-  /**
-   * 检查商家是否已存在
-   */
-  private async checkMerchantExists(registerDto: RegisterDto): Promise<void> {
-    if (registerDto.email) {
-      const exists = await this.prisma.merchantUser.findUnique({
-        where: { email: registerDto.email },
-      });
-      if (exists) throw BusinessError.emailAlreadyExists();
-    }
-
-    if (registerDto.phone) {
-      const exists = await this.prisma.merchantUser.findUnique({
-        where: { phone: registerDto.phone },
-      });
-      if (exists) throw BusinessError.phoneAlreadyExists();
-    }
-
-    if (registerDto.username) {
-      const exists = await this.prisma.merchantUser.findUnique({
-        where: { username: registerDto.username },
-      });
-      if (exists) throw BusinessError.usernameAlreadyExists();
-    }
   }
 }

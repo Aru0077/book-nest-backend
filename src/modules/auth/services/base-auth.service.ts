@@ -145,7 +145,6 @@ export class BaseAuthService {
         role,
         email: dbUser.email,
         phone: dbUser.phone,
-        username: dbUser.username,
         status: dbUser.status,
         adminRole: dbUser.adminRole as AdminRole,
       };
@@ -185,7 +184,7 @@ export class BaseAuthService {
     id: string;
     email: string | null;
     phone: string | null;
-    username: string | null;
+    username?: string | null;
     status: string;
     adminRole?: string;
   } | null> {
@@ -210,17 +209,24 @@ export class BaseAuthService {
         }
         return admin;
       }
-      case UserRole.MERCHANT:
-        return this.prisma.merchantUser.findUnique({
+      case UserRole.MERCHANT: {
+        const merchant = await this.prisma.merchantUser.findUnique({
           where: { id: userId, status: 'ACTIVE' },
           select: {
             id: true,
             email: true,
             phone: true,
-            username: true,
             status: true,
           },
         });
+        if (merchant) {
+          return {
+            ...merchant,
+            username: null, // merchant表不再有username字段
+          };
+        }
+        return merchant;
+      }
       case UserRole.CUSTOMER:
         return this.prisma.customerUser.findUnique({
           where: { id: userId, status: 'ACTIVE' },

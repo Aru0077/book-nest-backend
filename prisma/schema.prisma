@@ -51,7 +51,6 @@ model AdminUser {
   id       String @id @default(cuid())
   email    String? @unique
   phone    String? @unique
-  username String? @unique
   password String
   
   // 管理员权限和状态
@@ -81,24 +80,20 @@ model MerchantUser {
   id       String @id @default(cuid())
   email    String? @unique
   phone    String? @unique
-  username String? @unique
   password String
-  
+
   // 验证状态
   emailVerified Boolean @default(false)
   phoneVerified Boolean @default(false)
-  
+
   // 用户状态
   status UserStatus @default(ACTIVE)
-  
-  // 安全密码 (6位数字，用于敏感操作)
-  securityPassword String?
-  
+
   // 时间戳
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   lastLoginAt DateTime?
-  
+
   @@map("merchant_users")
 }
 

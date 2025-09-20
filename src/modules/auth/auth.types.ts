@@ -39,16 +39,16 @@ export interface RefreshTokenPayload extends JwtPayload {
 
 // 登录凭证
 export interface LoginDto {
-  identifier: string; // 邮箱/手机号/用户名
+  identifier: string; // 邮箱/手机号
   password: string;
 }
 
-// 注册数据
-export interface RegisterDto {
-  email?: string;
-  phone?: string;
-  username?: string;
-  password: string;
+// 刷新令牌响应
+export interface RefreshTokenResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  refreshExpiresIn: number;
 }
 
 // 认证用户信息
@@ -57,7 +57,6 @@ export interface AuthUser {
   role: UserRole;
   email?: string;
   phone?: string;
-  username?: string;
 }
 
 // 登录响应
@@ -74,20 +73,6 @@ export interface AuthRequest extends Request {
   user: AuthUser;
 }
 
-// 管理员注册数据
-export interface AdminRegisterDto {
-  email?: string;
-  phone?: string;
-  username?: string;
-  password: string;
-}
-
-// 管理员审批数据
-export interface AdminApprovalDto {
-  adminId: string;
-  rejectedReason?: string;
-}
-
 // 管理员信息（包含状态和角色）
 export interface AdminInfo {
   id: string;
@@ -95,33 +80,10 @@ export interface AdminInfo {
   status: AdminStatus;
   email?: string;
   phone?: string;
-  username?: string;
   appliedAt: Date;
   approvedBy?: string;
   approvedAt?: Date;
   rejectedReason?: string;
-}
-
-// 待审批管理员列表项
-export interface PendingAdminItem {
-  id: string;
-  email?: string;
-  phone?: string;
-  username?: string;
-  appliedAt: Date;
-}
-
-// 刷新令牌DTO
-export interface RefreshTokenDto {
-  refreshToken: string;
-}
-
-// 刷新令牌响应
-export interface RefreshTokenResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  refreshExpiresIn: number;
 }
 
 // 缓存用户数据类型
@@ -130,7 +92,6 @@ export interface CachedUser {
   role: UserRole;
   email: string | null;
   phone: string | null;
-  username: string | null;
   status: string;
   adminRole?: AdminRole; // 仅管理员有此字段
 }

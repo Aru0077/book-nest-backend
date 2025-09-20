@@ -49,12 +49,6 @@ export class AdminInfoDto {
   })
   phone?: string;
 
-  @ApiPropertyOptional({
-    description: '用户名',
-    example: 'admin001',
-  })
-  username?: string;
-
   @ApiProperty({
     description: '申请时间',
     example: '2025-09-03T06:30:00.000Z',

@@ -4,8 +4,8 @@ import { IsStrongPassword } from '@/common/validators';
 
 export class LoginDto {
   @ApiProperty({
-    description: '登录标识符(邮箱/手机号/用户名)',
-    example: 'admin@booknest.com',
+    description: '登录标识符(邮箱/手机号)',
+    example: '13800138000 或 user@example.com',
   })
   @IsString()
   @IsNotEmpty({ message: '登录标识符不能为空' })

@@ -2,10 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class MerchantAuthProfileDto {
   @ApiProperty({
-    description: '是否已设置账号密码（用户名和密码都存在）',
+    description: '是否已设置登录密码',
     example: true,
   })
-  hasAccount: boolean;
+  hasPassword: boolean;
 
   @ApiProperty({
     description: '是否已设置手机号',
@@ -30,10 +30,4 @@ export class MerchantAuthProfileDto {
     example: false,
   })
   emailVerified: boolean;
-
-  @ApiProperty({
-    description: '是否已设置安全密码',
-    example: false,
-  })
-  hasSecurityPassword: boolean;
 }

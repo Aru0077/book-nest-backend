@@ -23,17 +23,15 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { MerchantAuthService } from '../services/merchant-auth.service';
 import { BaseAuthService } from '../services/base-auth.service';
 import {
-  AccountSetupDto,
-  EmailVerificationDto,
+  BindContactDto,
   LoginDto,
   LoginResponseDto,
   MerchantAuthProfileDto,
-  PhoneVerificationDto,
   RefreshTokenDto,
   RefreshTokenResponseDto,
-  RegisterDto,
-  SetSecurityPasswordDto,
-  VerifySecurityPasswordDto,
+  SendCodeDto,
+  SetPasswordDto,
+  VerifyLoginDto,
 } from '../dto';
 import { AuthUser } from '../auth.types';
 
@@ -50,7 +48,7 @@ export class MerchantAuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '商家登录',
-    description: '商家使用邮箱/手机号/用户名和密码进行登录',
+    description: '商家使用邮箱/手机号和密码进行登录',
   })
   @ApiResponse({
     status: 200,
@@ -85,49 +83,6 @@ export class MerchantAuthController {
   })
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.merchantAuthService.login(loginDto);
-  }
-
-  @Post('register')
-  @Public()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: '商家注册',
-    description:
-      '新商家注册账户，需要提供邮箱/手机号/用户名中的至少一个作为登录凭证',
-  })
-  @ApiResponse({
-    status: 201,
-    description: '注册成功',
-    type: LoginResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误',
-    schema: {
-      example: {
-        success: false,
-        code: 400,
-        message: '至少提供一个联系方式',
-        timestamp: '2025-09-03T02:30:00.000Z',
-        path: '/merchant/auth/register',
-        method: 'POST',
-      },
-    },
-  })
-  @ApiConflictResponse({
-    description: '注册信息冲突',
-    schema: {
-      example: {
-        success: false,
-        code: 409,
-        message: '邮箱已被注册',
-        timestamp: '2025-09-03T02:30:00.000Z',
-        path: '/merchant/auth/register',
-        method: 'POST',
-      },
-    },
-  })
-  async register(@Body() registerDto: RegisterDto): Promise<LoginResponseDto> {
-    return this.merchantAuthService.register(registerDto);
   }
 
   @Post('refresh')
@@ -194,44 +149,12 @@ export class MerchantAuthController {
   // ========================================
   // 验证码发送接口
   // ========================================
-  @Post('send-sms-code')
+  @Post('send-code')
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '发送注册用短信验证码',
-    description: '为商家注册发送短信验证码，会先检查手机号是否已被注册',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '验证码发送成功',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          message: '验证码已发送',
-          phone: '138****8000',
-        },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-11T10:00:00.000Z',
-      },
-    },
-  })
-  @ApiConflictResponse({
-    description: '手机号已被注册',
-  })
-  async sendSmsCode(
-    @Body() { phone }: { phone: string },
-  ): Promise<{ message: string; phone: string }> {
-    return this.merchantAuthService.sendRegistrationSmsCode(phone);
-  }
-
-  @Post('send-email-code')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '发送注册用邮箱验证码',
-    description: '为商家注册发送邮箱验证码，会先检查邮箱是否已被注册',
+    summary: '发送验证码',
+    description: '发送手机号或邮箱验证码，用于登录或绑定',
   })
   @ApiResponse({
     status: 200,
@@ -244,212 +167,53 @@ export class MerchantAuthController {
         },
         code: 200,
         message: 'Request successful',
-        timestamp: '2025-09-11T10:00:00.000Z',
+        timestamp: '2025-09-15T10:00:00.000Z',
       },
     },
   })
-  @ApiConflictResponse({
-    description: '邮箱已被注册',
-  })
-  async sendEmailCode(
-    @Body() { email }: { email: string },
+  async sendCode(
+    @Body() sendCodeDto: SendCodeDto,
   ): Promise<{ message: string }> {
-    return this.merchantAuthService.sendRegistrationEmailCode(email);
+    return this.merchantAuthService.sendCode(sendCodeDto.contact);
   }
 
   // ========================================
-  // 验证码认证接口
+  // 验证码登录/注册接口
   // ========================================
 
-  @Post('register/phone-code')
+  @Post('verify-login')
   @Public()
-  @HttpCode(HttpStatus.CREATED)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '手机验证码注册',
-    description: '使用手机号和短信验证码注册商家账户',
+    summary: '验证码登录/注册',
+    description: '使用手机号或邮箱验证码登录，如果未注册则自动注册后登录',
   })
   @ApiResponse({
-    status: 201,
-    description: '注册成功',
+    status: 200,
+    description: '登录/注册成功',
     type: LoginResponseDto,
   })
   @ApiBadRequestResponse({
     description: '请求参数错误或验证码无效',
   })
-  @ApiConflictResponse({
-    description: '手机号已被注册',
-  })
-  async registerByPhoneCode(
-    @Body() registerDto: PhoneVerificationDto,
+  async verifyLogin(
+    @Body() verifyLoginDto: VerifyLoginDto,
   ): Promise<LoginResponseDto> {
-    return this.merchantAuthService.registerByPhoneCode(
-      registerDto.phone,
-      registerDto.code,
-    );
-  }
-
-  @Post('register/email-code')
-  @Public()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: '邮箱验证码注册',
-    description: '使用邮箱和邮箱验证码注册商家账户',
-  })
-  @ApiResponse({
-    status: 201,
-    description: '注册成功',
-    type: LoginResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误或验证码无效',
-  })
-  @ApiConflictResponse({
-    description: '邮箱已被注册',
-  })
-  async registerByEmailCode(
-    @Body() registerDto: EmailVerificationDto,
-  ): Promise<LoginResponseDto> {
-    return this.merchantAuthService.registerByEmailCode(
-      registerDto.email,
-      registerDto.code,
-    );
-  }
-
-  @Post('login/phone-code')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '手机验证码登录',
-    description: '使用手机号和短信验证码登录',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '登录成功',
-    type: LoginResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误或验证码无效',
-  })
-  @ApiUnauthorizedResponse({
-    description: '手机号未注册或未验证',
-  })
-  async loginByPhoneCode(
-    @Body() loginDto: PhoneVerificationDto,
-  ): Promise<LoginResponseDto> {
-    return this.merchantAuthService.loginByPhoneCode(
-      loginDto.phone,
-      loginDto.code,
-    );
-  }
-
-  @Post('login/email-code')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '邮箱验证码登录',
-    description: '使用邮箱和邮箱验证码登录',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '登录成功',
-    type: LoginResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误或验证码无效',
-  })
-  @ApiUnauthorizedResponse({
-    description: '邮箱未注册或未验证',
-  })
-  async loginByEmailCode(
-    @Body() loginDto: EmailVerificationDto,
-  ): Promise<LoginResponseDto> {
-    return this.merchantAuthService.loginByEmailCode(
-      loginDto.email,
-      loginDto.code,
+    return this.merchantAuthService.verifyLogin(
+      verifyLoginDto.contact,
+      verifyLoginDto.code,
     );
   }
 
   // ========================================
-  // 账户绑定接口
+  // 账户设置接口
   // ========================================
 
-  @Post('bind/phone')
+  @Post('set-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '绑定手机号',
-    description: '使用短信验证码绑定手机号到当前账户',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '绑定成功',
-    schema: {
-      example: {
-        success: true,
-        data: { message: '手机号绑定成功' },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-10T06:30:00.000Z',
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误或验证码无效',
-  })
-  @ApiConflictResponse({
-    description: '手机号已被其他用户使用',
-  })
-  async bindPhone(
-    @CurrentUser() currentUser: AuthUser,
-    @Body() bindPhoneDto: PhoneVerificationDto,
-  ): Promise<{ message: string }> {
-    return this.merchantAuthService.bindPhone(
-      currentUser.id,
-      bindPhoneDto.phone,
-      bindPhoneDto.code,
-    );
-  }
-
-  @Post('bind/email')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '绑定邮箱',
-    description: '使用邮箱验证码绑定邮箱到当前账户',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '绑定成功',
-    schema: {
-      example: {
-        success: true,
-        data: { message: '邮箱绑定成功' },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-10T06:30:00.000Z',
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误或验证码无效',
-  })
-  @ApiConflictResponse({
-    description: '邮箱已被其他用户使用',
-  })
-  async bindEmail(
-    @CurrentUser() currentUser: AuthUser,
-    @Body() bindEmailDto: EmailVerificationDto,
-  ): Promise<{ message: string }> {
-    return this.merchantAuthService.bindEmail(
-      currentUser.id,
-      bindEmailDto.email,
-      bindEmailDto.code,
-    );
-  }
-
-  @Post('bind/account')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '设置账号密码',
-    description: '为当前用户设置用户名和密码，用于密码登录',
+    summary: '设置/修改登录密码',
+    description: '设置或修改登录密码，用于密码登录',
   })
   @ApiResponse({
     status: 200,
@@ -457,95 +221,60 @@ export class MerchantAuthController {
     schema: {
       example: {
         success: true,
-        data: { message: '账号密码设置成功' },
+        data: { message: '密码设置成功' },
         code: 200,
         message: 'Request successful',
-        timestamp: '2025-09-10T06:30:00.000Z',
+        timestamp: '2025-09-15T10:30:00.000Z',
       },
     },
   })
   @ApiBadRequestResponse({
-    description: '请求参数错误',
+    description: '请求参数错误或原密码错误',
+  })
+  async setPassword(
+    @CurrentUser() currentUser: AuthUser,
+    @Body() setPasswordDto: SetPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.merchantAuthService.setPassword(
+      currentUser.id,
+      setPasswordDto.password,
+      setPasswordDto.oldPassword,
+    );
+  }
+
+  @Post('bind-contact')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '绑定联系方式',
+    description: '使用验证码绑定新的手机号或邮箱到当前账户',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '绑定成功',
+    schema: {
+      example: {
+        success: true,
+        data: { message: '联系方式绑定成功' },
+        code: 200,
+        message: 'Request successful',
+        timestamp: '2025-09-15T10:30:00.000Z',
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: '请求参数错误或验证码无效',
   })
   @ApiConflictResponse({
-    description: '用户名已被使用',
+    description: '联系方式已被其他用户使用',
   })
-  async bindAccount(
+  async bindContact(
     @CurrentUser() currentUser: AuthUser,
-    @Body() bindAccountDto: AccountSetupDto,
+    @Body() bindContactDto: BindContactDto,
   ): Promise<{ message: string }> {
-    return this.merchantAuthService.setAccount(
+    return this.merchantAuthService.bindContact(
       currentUser.id,
-      bindAccountDto.username,
-      bindAccountDto.password,
-    );
-  }
-
-  // ========================================
-  // 安全验证接口
-  // ========================================
-
-  @Post('security/set')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '设置安全密码',
-    description: '设置6位数字安全密码，用于敏感操作验证',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '设置成功',
-    schema: {
-      example: {
-        success: true,
-        data: { message: '安全密码设置成功' },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-10T06:30:00.000Z',
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: '请求参数错误',
-  })
-  async setSecurityPassword(
-    @CurrentUser() currentUser: AuthUser,
-    @Body() setPasswordDto: SetSecurityPasswordDto,
-  ): Promise<{ message: string }> {
-    return this.merchantAuthService.setSecurityPassword(
-      currentUser.id,
-      setPasswordDto.securityPassword,
-    );
-  }
-
-  @Post('security/verify')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '验证安全密码',
-    description: '验证6位数字安全密码，用于敏感操作确认',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '验证成功',
-    schema: {
-      example: {
-        success: true,
-        data: { message: '验证成功' },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-10T06:30:00.000Z',
-      },
-    },
-  })
-  @ApiBadRequestResponse({
-    description: '安全密码错误或未设置',
-  })
-  async verifySecurityPassword(
-    @CurrentUser() currentUser: AuthUser,
-    @Body() verifyDto: VerifySecurityPasswordDto,
-  ): Promise<{ message: string }> {
-    return this.merchantAuthService.verifySecurityPassword(
-      currentUser.id,
-      verifyDto.securityPassword,
+      bindContactDto.contact,
+      bindContactDto.code,
     );
   }
 

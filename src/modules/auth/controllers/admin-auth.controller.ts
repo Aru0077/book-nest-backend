@@ -25,21 +25,22 @@ import {
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { SuperAdminOnly } from '@/common/decorators/admin-roles.decorator';
-import {
-  AuthThrottle,
-  CustomThrottle,
-  RegisterThrottle,
-} from '@/common/decorators/throttle.decorator';
+import { CustomThrottle } from '@/common/decorators/throttle.decorator';
 import { AdminAuthService } from '../services/admin-auth.service';
 import { BaseAuthService } from '../services/base-auth.service';
 import { LoginDto } from '../dto/login.dto';
 import { LoginResponseDto } from '../dto/auth-response.dto';
-import { AdminRegisterDto } from '../dto/admin-register.dto';
 import { AdminApprovalDto, AdminInfoDto } from '../dto/admin-approval.dto';
 import {
   RefreshTokenDto,
   RefreshTokenResponseDto,
 } from '../dto/refresh-token.dto';
+import {
+  BindContactDto,
+  SendCodeDto,
+  SetPasswordDto,
+  VerifyLoginDto,
+} from '../dto/unified-auth.dto';
 import { AuthUser } from '../auth.types';
 
 @ApiTags('Admin Auth')
@@ -50,14 +51,16 @@ export class AdminAuthController {
     private readonly baseAuthService: BaseAuthService,
   ) {}
 
-  // 管理员登录
+  // ========================================
+  // 基础认证接口 (8个，与Merchant一致)
+  // ========================================
+
   @Post('login')
   @Public()
-  @AuthThrottle() // 应用认证限流
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '管理员登录',
-    description: '管理员使用邮箱/手机号/用户名和密码进行登录',
+    description: '管理员使用邮箱/手机号和密码进行登录',
   })
   @ApiResponse({
     status: 200,
@@ -66,91 +69,171 @@ export class AdminAuthController {
   })
   @ApiBadRequestResponse({
     description: '请求参数错误',
-    schema: {
-      example: {
-        success: false,
-        code: 400,
-        message: '登录标识符不能为空',
-        timestamp: '2025-09-03T02:30:00.000Z',
-        path: '/admin/auth/login',
-        method: 'POST',
-      },
-    },
   })
   @ApiUnauthorizedResponse({
     description: '认证失败',
-    schema: {
-      example: {
-        success: false,
-        code: 401,
-        message: '用户不存在或未激活',
-        timestamp: '2025-09-03T02:30:00.000Z',
-        path: '/admin/auth/login',
-        method: 'POST',
-      },
-    },
   })
   async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.adminAuthService.login(loginDto);
   }
 
-  // 管理员自助注册
-  @Post('register')
+  @Post('refresh')
   @Public()
-  @RegisterThrottle() // 应用注册限流
-  @HttpCode(HttpStatus.CREATED)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '管理员自助注册',
-    description: '新管理员自助注册申请，需要超级管理员审批后才能使用',
+    summary: '刷新访问令牌',
+    description: '使用刷新令牌获取新的访问令牌和刷新令牌',
   })
   @ApiResponse({
-    status: 201,
-    description: '注册申请提交成功',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          message: '管理员注册申请已提交，等待超级管理员审批',
-        },
-        code: 201,
-        message: 'Request successful',
-        timestamp: '2025-09-03T06:50:00.000Z',
-      },
-    },
+    status: 200,
+    description: '刷新成功',
+    type: RefreshTokenResponseDto,
   })
-  @ApiBadRequestResponse({
-    description: '请求参数错误',
-    schema: {
-      example: {
-        success: false,
-        code: 400,
-        message: '至少提供一个联系方式',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/register',
-        method: 'POST',
-      },
-    },
+  @ApiUnauthorizedResponse({
+    description: '刷新令牌无效或已过期',
   })
-  @ApiConflictResponse({
-    description: '注册信息冲突',
-    schema: {
-      example: {
-        success: false,
-        code: 409,
-        message: '邮箱已被注册',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/register',
-        method: 'POST',
-      },
-    },
-  })
-  async register(
-    @Body() registerDto: AdminRegisterDto,
-  ): Promise<{ message: string }> {
-    return this.adminAuthService.register(registerDto);
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+  ): Promise<RefreshTokenResponseDto> {
+    return this.baseAuthService.refreshAccessToken(
+      refreshTokenDto.refreshToken,
+    );
   }
 
-  // 获取待审批的管理员列表
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '管理员注销',
+    description: '注销当前管理员，清除刷新令牌和缓存',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '注销成功',
+  })
+  async logout(
+    @CurrentUser() currentUser: AuthUser,
+  ): Promise<{ message: string }> {
+    await this.baseAuthService.logout(currentUser.id, currentUser.role);
+    return { message: '注销成功' };
+  }
+
+  @Post('send-code')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '发送验证码',
+    description: '发送手机号或邮箱验证码，用于登录或绑定',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '验证码发送成功',
+  })
+  async sendCode(
+    @Body() sendCodeDto: SendCodeDto,
+  ): Promise<{ message: string }> {
+    return this.adminAuthService.sendCode(sendCodeDto.contact);
+  }
+
+  @Post('verify-login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '验证码登录/注册',
+    description:
+      '使用手机号或邮箱验证码登录，如果未注册则自动注册后登录（需要审批）',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '登录/注册成功',
+    type: LoginResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: '请求参数错误或验证码无效',
+  })
+  async verifyLogin(
+    @Body() verifyLoginDto: VerifyLoginDto,
+  ): Promise<LoginResponseDto> {
+    return this.adminAuthService.verifyLogin(
+      verifyLoginDto.contact,
+      verifyLoginDto.code,
+    );
+  }
+
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '设置/修改登录密码',
+    description: '设置或修改登录密码，用于密码登录',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '设置成功',
+  })
+  @ApiBadRequestResponse({
+    description: '请求参数错误或原密码错误',
+  })
+  async setPassword(
+    @CurrentUser() currentUser: AuthUser,
+    @Body() setPasswordDto: SetPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.adminAuthService.setPassword(
+      currentUser.id,
+      setPasswordDto.password,
+      setPasswordDto.oldPassword,
+    );
+  }
+
+  @Post('bind-contact')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '绑定联系方式',
+    description: '使用验证码绑定新的手机号或邮箱到当前账户',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '绑定成功',
+  })
+  @ApiBadRequestResponse({
+    description: '请求参数错误或验证码无效',
+  })
+  @ApiConflictResponse({
+    description: '联系方式已被其他用户使用',
+  })
+  async bindContact(
+    @CurrentUser() currentUser: AuthUser,
+    @Body() bindContactDto: BindContactDto,
+  ): Promise<{ message: string }> {
+    return this.adminAuthService.bindContact(
+      currentUser.id,
+      bindContactDto.contact,
+      bindContactDto.code,
+    );
+  }
+
+  @Get('profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '获取认证状态',
+    description: '获取当前管理员的认证状态信息',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '获取成功',
+  })
+  async getAuthProfile(@CurrentUser() currentUser: AuthUser): Promise<{
+    hasPassword: boolean;
+    hasPhone: boolean;
+    phoneVerified: boolean;
+    hasEmail: boolean;
+    emailVerified: boolean;
+  }> {
+    return this.adminAuthService.getAuthProfile(currentUser.id);
+  }
+
+  // ========================================
+  // 管理员审批功能 (Admin特有)
+  // ========================================
+
   @Get('pending')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -164,28 +247,17 @@ export class AdminAuthController {
   })
   @ApiForbiddenResponse({
     description: '权限不足',
-    schema: {
-      example: {
-        success: false,
-        code: 403,
-        message: '只有超级管理员可以查看待审批列表',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/pending',
-        method: 'GET',
-      },
-    },
   })
   @SuperAdminOnly()
   async getPendingAdmins(): Promise<AdminInfoDto[]> {
     return this.adminAuthService.getPendingAdmins();
   }
 
-  // 审批通过管理员申请
   @Post('approve/:adminId')
   @CustomThrottle({
     short: { limit: 2, ttl: 5000 },
     medium: { limit: 5, ttl: 60000 },
-  }) // 审批限流
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '审批通过管理员申请',
@@ -194,43 +266,12 @@ export class AdminAuthController {
   @ApiResponse({
     status: 200,
     description: '审批成功',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          message: '管理员申请已通过审批',
-        },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-03T06:50:00.000Z',
-      },
-    },
   })
   @ApiNotFoundResponse({
     description: '管理员申请不存在',
-    schema: {
-      example: {
-        success: false,
-        code: 404,
-        message: '管理员申请不存在',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/approve/clq123',
-        method: 'POST',
-      },
-    },
   })
   @ApiBadRequestResponse({
     description: '申请状态不正确',
-    schema: {
-      example: {
-        success: false,
-        code: 400,
-        message: '该管理员申请状态不是待审批',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/approve/clq123',
-        method: 'POST',
-      },
-    },
   })
   @SuperAdminOnly()
   async approveAdmin(
@@ -240,12 +281,11 @@ export class AdminAuthController {
     return this.adminAuthService.approveAdmin(adminId, currentUser.id);
   }
 
-  // 拒绝管理员申请
   @Put('reject/:adminId')
   @CustomThrottle({
     short: { limit: 2, ttl: 5000 },
     medium: { limit: 5, ttl: 60000 },
-  }) // 拒绝限流
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: '拒绝管理员申请',
@@ -254,17 +294,6 @@ export class AdminAuthController {
   @ApiResponse({
     status: 200,
     description: '拒绝成功',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          message: '管理员申请已被拒绝',
-        },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-03T06:50:00.000Z',
-      },
-    },
   })
   @ApiNotFoundResponse({
     description: '管理员申请不存在',
@@ -284,68 +313,5 @@ export class AdminAuthController {
       currentUser.id,
       rejectedReason,
     );
-  }
-
-  // 刷新访问令牌
-  @Post('refresh')
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '刷新访问令牌',
-    description: '使用刷新令牌获取新的访问令牌和刷新令牌',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '刷新成功',
-    type: RefreshTokenResponseDto,
-  })
-  @ApiUnauthorizedResponse({
-    description: '刷新令牌无效或已过期',
-    schema: {
-      example: {
-        success: false,
-        code: 401,
-        message: '刷新令牌已失效',
-        timestamp: '2025-09-03T06:50:00.000Z',
-        path: '/admin/auth/refresh',
-        method: 'POST',
-      },
-    },
-  })
-  async refreshToken(
-    @Body() refreshTokenDto: RefreshTokenDto,
-  ): Promise<RefreshTokenResponseDto> {
-    return this.baseAuthService.refreshAccessToken(
-      refreshTokenDto.refreshToken,
-    );
-  }
-
-  // 管理员注销
-  @Post('logout')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '管理员注销',
-    description: '注销当前管理员，清除刷新令牌和缓存',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '注销成功',
-    schema: {
-      example: {
-        success: true,
-        data: {
-          message: '注销成功',
-        },
-        code: 200,
-        message: 'Request successful',
-        timestamp: '2025-09-03T06:50:00.000Z',
-      },
-    },
-  })
-  async logout(
-    @CurrentUser() currentUser: AuthUser,
-  ): Promise<{ message: string }> {
-    await this.baseAuthService.logout(currentUser.id, currentUser.role);
-    return { message: '注销成功' };
   }
 }
